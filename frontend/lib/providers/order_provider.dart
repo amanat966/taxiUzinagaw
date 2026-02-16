@@ -56,7 +56,7 @@ class OrderProvider with ChangeNotifier {
         // Ignore if not dispatcher
       }
     } catch (e) {
-      print("Polling error: \$e");
+      debugPrint('Polling error: $e');
     }
   }
 
@@ -77,6 +77,11 @@ class OrderProvider with ChangeNotifier {
 
   Future<void> updateOrderStatus(int orderId, String status) async {
     await _apiService.updateOrderStatus(orderId, status);
+    await _fetchData();
+  }
+
+  Future<void> assignOrderDriver(dynamic orderId, int driverId) async {
+    await _apiService.assignOrderDriver(orderId, driverId);
     await _fetchData();
   }
 }
