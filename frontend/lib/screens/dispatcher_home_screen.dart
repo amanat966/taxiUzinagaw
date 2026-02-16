@@ -66,7 +66,7 @@ class _DispatcherHomeScreenState extends State<DispatcherHomeScreen> {
     final phoneCtrl = TextEditingController();
     final passwordCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
-    const phoneMask = MaskTextInputFormatter(
+    final phoneMask = MaskTextInputFormatter(
       mask: '+7 (###) ###-##-##',
       filter: {'#': RegExp(r'[0-9]')},
     );

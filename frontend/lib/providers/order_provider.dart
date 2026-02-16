@@ -60,14 +60,15 @@ class OrderProvider with ChangeNotifier {
     }
   }
 
-  Future<void> createOrder(
+  Future<Map<String, dynamic>> createOrder(
     String from,
     String to,
     String comment,
     int? driverId,
   ) async {
-    await _apiService.createOrder(from, to, comment, driverId);
+    final order = await _apiService.createOrder(from, to, comment, driverId);
     await _fetchData();
+    return order;
   }
 
   Future<void> updateDriverStatus(String status) async {

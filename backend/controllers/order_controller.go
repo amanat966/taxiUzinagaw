@@ -1,7 +1,9 @@
 package controllers
 
 import (
+	"log"
 	"net/http"
+	"strconv"
 	"taxi-fleet-backend/database"
 	"taxi-fleet-backend/models"
 	"time"
@@ -72,18 +74,35 @@ type AssignDriverInput struct {
 
 // AssignDriver assigns a driver to an order (Dispatcher only)
 func AssignDriver(c *gin.Context) {
-	id := c.Param("id")
+	idParam := c.Param("id")
+	log.Printf("AssignDriver called with order ID: %s", idParam)
+	
 	var input AssignDriverInput
 	if err := c.ShouldBindJSON(&input); err != nil {
+		log.Printf("Error binding JSON: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
+	log.Printf("AssignDriver: driver_id=%d, order_id=%s", input.DriverID, idParam)
+
+	// Convert string ID to uint for GORM query
+	idInt, err := strconv.ParseUint(idParam, 10, 32)
+	if err != nil {
+		log.Printf("Error parsing order ID: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID format"})
+		return
+	}
+	id := uint(idInt)
+
 	var order models.Order
 	if err := database.DB.First(&order, id).Error; err != nil {
+		log.Printf("Order not found: ID=%d, error=%v", id, err)
 		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
 		return
 	}
+	
+	log.Printf("Order found: ID=%d, Status=%s", order.ID, order.Status)
 
 	if order.Status == models.OrderCancelled || order.Status == models.OrderDone {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot assign driver to completed or cancelled order"})
@@ -119,12 +138,20 @@ type UpdateOrderStatusInput struct {
 
 // UpdateOrderStatus handles status transitions
 func UpdateOrderStatus(c *gin.Context) {
-	id := c.Param("id")
+	idParam := c.Param("id")
 	var input UpdateOrderStatusInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	// Convert string ID to uint for GORM query
+	idInt, err := strconv.ParseUint(idParam, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid order ID format"})
+		return
+	}
+	id := uint(idInt)
 
 	var order models.Order
 	if err := database.DB.First(&order, id).Error; err != nil {

@@ -44,6 +44,7 @@ func main() {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
+		log.Printf("Request: Method=%s, Path=%s", c.Request.Method, c.Request.URL.Path)
 		c.Next()
 	})
 	r.Use(cors.New(cors.Config{
@@ -83,12 +84,22 @@ func main() {
 		api.POST("/drivers", middleware.RoleMiddleware("dispatcher"), controllers.CreateDriver)
 		api.PUT("/drivers/status", middleware.RoleMiddleware("driver"), controllers.UpdateDriverStatus)
 
-		// Order Routes
-		api.POST("/orders", middleware.RoleMiddleware("dispatcher"), controllers.CreateOrder)
-		api.GET("/orders", controllers.GetOrders)
-		api.PUT("/orders/:id/assign", middleware.RoleMiddleware("dispatcher"), controllers.AssignDriver)
-		api.PUT("/orders/:id/status", controllers.UpdateOrderStatus)
+		// Order Routes - более специфичные маршруты должны быть первыми
+		// Регистрируем маршруты с параметрами перед общими
+		ordersGroup := api.Group("/orders")
+		{
+			ordersGroup.PUT("/:id/assign", middleware.RoleMiddleware("dispatcher"), controllers.AssignDriver)
+			ordersGroup.PUT("/:id/status", controllers.UpdateOrderStatus)
+			ordersGroup.POST("", middleware.RoleMiddleware("dispatcher"), controllers.CreateOrder)
+			ordersGroup.GET("", controllers.GetOrders)
+		}
 	}
+
+	// Обработчик для несуществующих маршрутов
+	r.NoRoute(func(c *gin.Context) {
+		log.Printf("NoRoute: Method=%s, Path=%s, FullPath=%s", c.Request.Method, c.Request.URL.Path, c.FullPath())
+		c.JSON(http.StatusNotFound, gin.H{"error": "Route not found", "method": c.Request.Method, "path": c.Request.URL.Path})
+	})
 
 	port := os.Getenv("PORT")
 	if port == "" {

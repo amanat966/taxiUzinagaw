@@ -129,7 +129,7 @@ class ApiService {
     }
   }
 
-  Future<void> createOrder(
+  Future<Map<String, dynamic>> createOrder(
     String from,
     String to,
     String comment,
@@ -149,10 +149,23 @@ class ApiService {
     if (response.statusCode != 200) {
       throw Exception(_parseError(response));
     }
+    
+    return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
   Future<void> assignOrderDriver(dynamic orderId, int driverId) async {
-    final id = orderId is int ? orderId : (orderId as num).toInt();
+    // Handle different types of orderId
+    int id;
+    if (orderId is int) {
+      id = orderId;
+    } else if (orderId is num) {
+      id = orderId.toInt();
+    } else if (orderId is String) {
+      id = int.parse(orderId);
+    } else {
+      throw Exception('Invalid order ID type: ${orderId.runtimeType}');
+    }
+    
     final response = await http.put(
       Uri.parse('$baseUrl/api/orders/$id/assign'),
       headers: await _getHeaders(),
@@ -179,9 +192,10 @@ class ApiService {
   String _parseError(http.Response response) {
     try {
       final decoded = jsonDecode(response.body);
-      return decoded['error'] ?? 'Unknown error';
+      final errorMsg = decoded['error'] ?? 'Unknown error';
+      return 'Error ${response.statusCode}: $errorMsg';
     } catch (_) {
-      return 'Error: ${response.statusCode}';
+      return 'Error ${response.statusCode}: ${response.body}';
     }
   }
 }
