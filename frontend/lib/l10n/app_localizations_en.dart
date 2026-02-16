@@ -1,0 +1,184 @@
+// ignore: unused_import
+import 'package:intl/intl.dart' as intl;
+import 'app_localizations.dart';
+
+// ignore_for_file: type=lint
+
+/// The translations for English (`en`).
+class AppLocalizationsEn extends AppLocalizations {
+  AppLocalizationsEn([String locale = 'en']) : super(locale);
+
+  @override
+  String get appTitle => 'Taxi Uzinagaw';
+
+  @override
+  String get login => 'Login';
+
+  @override
+  String get phone => 'Phone';
+
+  @override
+  String get password => 'Password';
+
+  @override
+  String get driver => 'Driver';
+
+  @override
+  String get dispatcher => 'Dispatcher';
+
+  @override
+  String get status => 'Status';
+
+  @override
+  String get free => 'Free';
+
+  @override
+  String get busy => 'Busy';
+
+  @override
+  String get offline => 'Offline';
+
+  @override
+  String get order => 'Order';
+
+  @override
+  String get from => 'From';
+
+  @override
+  String get to => 'To';
+
+  @override
+  String get inProgress => 'In progress';
+
+  @override
+  String get createOrder => 'Create order';
+
+  @override
+  String get addDriver => 'Add driver';
+
+  @override
+  String get name => 'Name';
+
+  @override
+  String get drivers => 'Drivers';
+
+  @override
+  String get activeOrders => 'Active orders';
+
+  @override
+  String get controlPanel => 'Control panel';
+
+  @override
+  String get logout => 'Logout';
+
+  @override
+  String get cancel => 'Cancel';
+
+  @override
+  String get comment => 'Comment';
+
+  @override
+  String get assignDriver => 'Assign driver (optional)';
+
+  @override
+  String get none => 'None';
+
+  @override
+  String get orderCreated => 'Order created';
+
+  @override
+  String get orderCancelled => 'Order cancelled';
+
+  @override
+  String get currentOrder => 'Current order';
+
+  @override
+  String get startTrip => 'Start trip';
+
+  @override
+  String get finishTrip => 'Finish';
+
+  @override
+  String get accept => 'Accept';
+
+  @override
+  String get noOrders => 'No orders yet, take a rest';
+
+  @override
+  String get noActiveOrder => 'No active order. Waiting for assignments...';
+
+  @override
+  String get queue => 'Queue';
+
+  @override
+  String get home => 'Home';
+
+  @override
+  String get profile => 'Profile';
+
+  @override
+  String get settings => 'Settings';
+
+  @override
+  String get changePassword => 'Change password';
+
+  @override
+  String get oldPassword => 'Current password';
+
+  @override
+  String get newPassword => 'New password';
+
+  @override
+  String get save => 'Save';
+
+  @override
+  String get passwordChanged => 'Password changed';
+
+  @override
+  String get loginFailed => 'Login failed';
+
+  @override
+  String get addDriverFormTitle => 'Add driver';
+
+  @override
+  String get driverCreated => 'Driver added';
+
+  @override
+  String get requiredField => 'Required field';
+
+  @override
+  String get minPasswordLength => 'Minimum 6 characters';
+
+  @override
+  String get statusNew => 'New';
+
+  @override
+  String get statusAssigned => 'Assigned';
+
+  @override
+  String get statusAccepted => 'Accepted';
+
+  @override
+  String get statusInProgress => 'In progress';
+
+  @override
+  String get statusDone => 'Done';
+
+  @override
+  String get statusCancelled => 'Cancelled';
+
+  @override
+  String get assignDriverToOrder => 'Assign driver';
+
+  @override
+  String get driverAssigned => 'Driver assigned';
+
+  @override
+  String get ordersCompleted => 'Orders completed';
+
+  @override
+  String get ordersInProgress => 'In progress';
+
+  @override
+  String get driverProfile => 'Driver profile';
+}
