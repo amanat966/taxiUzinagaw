@@ -34,8 +34,6 @@ func CreateOrder(c *gin.Context) {
 
 	if input.DriverID != nil {
 		order.Status = models.OrderAssigned
-		// Ideally check if driver exists and is not busy?
-		// For MVP, just assign.
 	}
 
 	if err := database.DB.Create(&order).Error; err != nil {
@@ -54,14 +52,11 @@ func GetOrders(c *gin.Context) {
 	var orders []models.Order
 
 	if role == string(models.RoleDispatcher) {
-		// Dispatcher sees all active orders (not done/cancelled)
-		// Or maybe all orders? Let's show active for now + new
 		if err := database.DB.Preload("Driver").Where("status NOT IN ?", []models.OrderStatus{models.OrderDone, models.OrderCancelled}).Find(&orders).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch orders"})
 			return
 		}
 	} else if role == string(models.RoleDriver) {
-		// Driver sees their assigned or active orders
 		if err := database.DB.Where("driver_id = ? AND status IN ?", userID, []models.OrderStatus{models.OrderAssigned, models.OrderAccepted, models.OrderInProgress}).Find(&orders).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch orders"})
 			return
@@ -69,6 +64,53 @@ func GetOrders(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, orders)
+}
+
+type AssignDriverInput struct {
+	DriverID uint `json:"driver_id" binding:"required"`
+}
+
+// AssignDriver assigns a driver to an order (Dispatcher only)
+func AssignDriver(c *gin.Context) {
+	id := c.Param("id")
+	var input AssignDriverInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var order models.Order
+	if err := database.DB.First(&order, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Order not found"})
+		return
+	}
+
+	if order.Status == models.OrderCancelled || order.Status == models.OrderDone {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot assign driver to completed or cancelled order"})
+		return
+	}
+
+	var driver models.User
+	if err := database.DB.First(&driver, input.DriverID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Driver not found"})
+		return
+	}
+	if driver.Role != models.RoleDriver {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "User is not a driver"})
+		return
+	}
+
+	order.DriverID = &input.DriverID
+	order.Status = models.OrderAssigned
+	order.UpdatedAt = time.Now()
+
+	if err := database.DB.Save(&order).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not assign driver"})
+		return
+	}
+
+	database.DB.Preload("Driver").First(&order, order.ID)
+	c.JSON(http.StatusOK, order)
 }
 
 type UpdateOrderStatusInput struct {
@@ -93,7 +135,6 @@ func UpdateOrderStatus(c *gin.Context) {
 	role, _ := c.Get("role")
 	userID, _ := c.Get("userID")
 
-	// Helper to update driver status based on order
 	updateDriverStatus := func(driverID uint, status models.DriverStatus) {
 		var driver models.User
 		if err := database.DB.First(&driver, driverID).Error; err == nil {
@@ -103,19 +144,15 @@ func UpdateOrderStatus(c *gin.Context) {
 	}
 
 	if role == string(models.RoleDispatcher) {
-		// Dispatcher can Cancel or Reassign (logic for reassign separate usually)
-		// For now allow Dispatcher to set any status, primarily for Cancel
 		if input.Status == models.OrderCancelled {
 			order.Status = models.OrderCancelled
 			if order.DriverID != nil {
-				updateDriverStatus(*order.DriverID, models.StatusFree) // Or check queue? MVP: Free
+				updateDriverStatus(*order.DriverID, models.StatusFree)
 			}
 		} else {
-			// Dispatcher assigning driver? mostly done via update with driver_id
 			order.Status = input.Status
 		}
 	} else {
-		// Driver transitions
 		if order.DriverID == nil || *order.DriverID != userID.(uint) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "Not your order"})
 			return
@@ -134,9 +171,7 @@ func UpdateOrderStatus(c *gin.Context) {
 		case models.OrderDone:
 			if order.Status == models.OrderInProgress {
 				order.Status = models.OrderDone
-				// Check queue? MVP: set Free
 				updateDriverStatus(*order.DriverID, models.StatusFree)
-				// TODO: In real app, check if next assigned order exists
 			}
 		default:
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid status transition"})
