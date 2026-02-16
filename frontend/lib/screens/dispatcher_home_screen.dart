@@ -526,15 +526,20 @@ class _DispatcherHomeScreenState extends State<DispatcherHomeScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: Text(l10n.controlPanel),
+        title: Text(
+          l10n.controlPanel,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.notifications_outlined),
             onPressed: () {},
+            tooltip: 'Уведомления',
           ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () => auth.logout(),
+            tooltip: l10n.logout,
           ),
         ],
       ),
@@ -543,32 +548,58 @@ class _DispatcherHomeScreenState extends State<DispatcherHomeScreen> {
           padding: EdgeInsets.zero,
           children: [
             DrawerHeader(
-              decoration: const BoxDecoration(color: AppTheme.primary),
+              decoration: const BoxDecoration(
+                gradient: AppTheme.primaryGradient,
+              ),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  const Icon(Icons.local_taxi, size: 48, color: Colors.white),
-                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(Icons.local_taxi, size: 32, color: Colors.white),
+                  ),
+                  const SizedBox(height: 12),
                   Text(
                     l10n.appTitle,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
+                      letterSpacing: -0.5,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  TextButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      Provider.of<LocaleProvider>(context, listen: false)
-                          .toggleLanguage();
-                    },
-                    icon: const Icon(Icons.language, color: Colors.white, size: 20),
-                    label: Text(
-                      Provider.of<LocaleProvider>(context).currentLanguageName,
-                      style: const TextStyle(color: Colors.white),
+                  const SizedBox(height: 8),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: TextButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        Provider.of<LocaleProvider>(context, listen: false)
+                            .toggleLanguage();
+                      },
+                      icon: const Icon(Icons.language, color: Colors.white, size: 16),
+                      label: Text(
+                        Provider.of<LocaleProvider>(context).currentLanguageName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
                     ),
                   ),
                 ],
@@ -593,7 +624,7 @@ class _DispatcherHomeScreenState extends State<DispatcherHomeScreen> {
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -606,7 +637,7 @@ class _DispatcherHomeScreenState extends State<DispatcherHomeScreen> {
               ),
               const SizedBox(height: 12),
               SizedBox(
-                height: 140,
+                height: 180,
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   itemCount: provider.drivers.length,
@@ -678,11 +709,31 @@ class _DispatcherHomeScreenState extends State<DispatcherHomeScreen> {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showCreateOrderDialog(context),
-        backgroundColor: AppTheme.primary,
-        icon: const Icon(Icons.add),
-        label: Text(l10n.createOrder),
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          gradient: AppTheme.primaryGradient,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.primary.withOpacity(0.4),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: FloatingActionButton.extended(
+          onPressed: () => _showCreateOrderDialog(context),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          icon: const Icon(Icons.add, size: 24),
+          label: Text(
+            l10n.createOrder,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -762,83 +813,115 @@ class _DriverCard extends StatelessWidget {
 
     return Container(
       width: 160,
+      height: 160,
       margin: const EdgeInsets.only(right: 12),
       child: Card(
-        elevation: 4,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.all(10),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircleAvatar(
-                    backgroundColor: AppTheme.primary.withOpacity(0.2),
-                    radius: 20,
-                    backgroundImage: hasPhoto ? NetworkImage(avatarUrl!) : null,
-                    child: hasPhoto
-                        ? null
-                        : Text(
-                            initials.toUpperCase(),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.secondary,
-                              fontSize: 16,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: statusColor.withOpacity(0.2),
+              width: 1.5,
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: AppTheme.primary.withOpacity(0.1),
+                      radius: 26,
+                      backgroundImage: hasPhoto ? NetworkImage(avatarUrl!) : null,
+                      child: hasPhoto
+                          ? null
+                          : Text(
+                              initials.toUpperCase(),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.primary,
+                                fontSize: 20,
+                              ),
                             ),
-                          ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: statusColor,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: statusColor.withOpacity(0.5),
-                          blurRadius: 4,
-                        ),
-                      ],
                     ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: statusColor,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white,
+                            width: 2.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: statusColor.withOpacity(0.5),
+                              blurRadius: 6,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: AppTheme.textPrimary,
                   ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                name,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-              ),
-              Text(
-                statusStr,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: statusColor,
-                  fontWeight: FontWeight.w600,
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    statusStr,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: statusColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              Text(
-                phone,
-                style: TextStyle(
-                  fontSize: 10,
-                  color: Colors.grey[600],
+                const SizedBox(height: 6),
+                Flexible(
+                  child: Text(
+                    phone,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.textSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -876,83 +959,224 @@ class _OrderCard extends StatelessWidget {
     final statusStr = l10n.orderStatus(status);
     final canAssign = driverId == null && status != 'cancelled';
 
+    Color statusColor;
+    switch (status) {
+      case 'new':
+        statusColor = AppTheme.primary;
+        break;
+      case 'assigned':
+        statusColor = AppTheme.accent;
+        break;
+      case 'accepted':
+      case 'in_progress':
+        statusColor = AppTheme.statusFree;
+        break;
+      case 'done':
+        statusColor = AppTheme.secondary;
+        break;
+      default:
+        statusColor = AppTheme.statusOffline;
+    }
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.location_on, color: AppTheme.statusFree, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    from,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: statusColor.withOpacity(0.2),
+            width: 1.5,
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Статус бейдж
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      statusStr,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: statusColor,
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            Padding(
-              padding: const EdgeInsets.only(left: 10),
-              child: Container(
-                width: 2,
-                height: 20,
-                color: AppTheme.primary.withOpacity(0.5),
+                ],
               ),
-            ),
-            Row(
-              children: [
-                const Icon(Icons.flag, color: AppTheme.statusBusy, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    to,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
+              const SizedBox(height: 16),
+              // Адрес отправления
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.background,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              ],
-            ),
-            const Divider(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    '${l10n.driver}: $driverName | ${l10n.status}: $statusStr',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.grey[600],
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.statusFree.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.location_on,
+                        color: AppTheme.statusFree,
+                        size: 18,
+                      ),
                     ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        from,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                if (canAssign)
-                  Tooltip(
-                    message: l10n.assignDriverToOrder,
-                    child: IconButton(
-                      onPressed: onAssignDriver,
-                      icon: const Icon(Icons.person_add, color: AppTheme.primary),
+              ),
+              // Линия между адресами
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  children: [
+                    const SizedBox(width: 20),
+                    Container(
+                      width: 2,
+                      height: 16,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            AppTheme.primary.withOpacity(0.3),
+                            AppTheme.primary.withOpacity(0.1),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Адрес назначения
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.background,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.statusBusy.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.flag,
+                        color: AppTheme.statusBusy,
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        to,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              // Информация о водителе и действия
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${l10n.driver}:',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          driverName,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                if (onCancel != null)
-                  IconButton(
-                    icon: const Icon(Icons.cancel, color: AppTheme.statusBusy),
-                    onPressed: onCancel,
-                  ),
-              ],
-            ),
-          ],
+                  if (canAssign)
+                    Container(
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: IconButton(
+                        onPressed: onAssignDriver,
+                        icon: const Icon(
+                          Icons.person_add,
+                          color: AppTheme.primary,
+                          size: 22,
+                        ),
+                        tooltip: l10n.assignDriverToOrder,
+                      ),
+                    ),
+                  if (onCancel != null) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: AppTheme.statusBusy.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.cancel_outlined,
+                          color: AppTheme.statusBusy,
+                          size: 22,
+                        ),
+                        onPressed: onCancel,
+                        tooltip: l10n.orderCancelled,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
