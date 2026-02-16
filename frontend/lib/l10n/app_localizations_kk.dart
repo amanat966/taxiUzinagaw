@@ -182,4 +182,7 @@ class AppLocalizationsKk extends AppLocalizations {
 
   @override
   String get driverProfile => 'Жүргізуші профилі';
+
+  @override
+  String get openIn2GIS => 'Открыть в 2ГИС';
 }

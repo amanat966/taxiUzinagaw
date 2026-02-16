@@ -447,6 +447,12 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Профиль водителя'**
   String get driverProfile;
+
+  /// No description provided for @openIn2GIS.
+  ///
+  /// In ru, this message translates to:
+  /// **'Открыть в 2ГИС'**
+  String get openIn2GIS;
 }
 
 class _AppLocalizationsDelegate

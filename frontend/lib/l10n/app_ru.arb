@@ -57,5 +57,6 @@
   "driverAssigned": "Водитель назначен",
   "ordersCompleted": "Заказов выполнено",
   "ordersInProgress": "В процессе",
-  "driverProfile": "Профиль водителя"
+  "driverProfile": "Профиль водителя",
+  "openIn2GIS": "Открыть в 2ГИС"
 }

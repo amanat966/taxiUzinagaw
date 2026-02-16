@@ -30,11 +30,31 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   }
 
   void _openMap(String from, String to) async {
-    final url = Uri.parse(
-      'https://2gis.ru/routeSearch/rsType/car/from/$from/to/$to',
+    // Кодируем адреса для URL
+    final encodedFrom = Uri.encodeComponent(from);
+    final encodedTo = Uri.encodeComponent(to);
+    
+    // Пробуем сначала открыть мобильное приложение 2ГИС через deep link
+    final mobileUrl = Uri.parse('dgis://2gis.ru/route/$encodedFrom/$encodedTo');
+    
+    // Если мобильное приложение не установлено, используем веб-версию
+    final webUrl = Uri.parse(
+      'https://2gis.ru/routeSearch/rsType/car/from/$encodedFrom/to/$encodedTo',
     );
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
+    
+    // Пробуем открыть мобильное приложение
+    if (await canLaunchUrl(mobileUrl)) {
+      try {
+        await launchUrl(mobileUrl, mode: LaunchMode.externalApplication);
+        return;
+      } catch (_) {
+        // Если не получилось, пробуем веб-версию
+      }
+    }
+    
+    // Открываем веб-версию 2ГИС
+    if (await canLaunchUrl(webUrl)) {
+      await launchUrl(webUrl, mode: LaunchMode.externalApplication);
     }
   }
 
@@ -365,75 +385,85 @@ class _HomeTab extends StatelessWidget {
                       ),
                     ],
                     const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        if (currentOrder['status'] == 'accepted')
-                          Expanded(
-                            child: SizedBox(
-                              height: 52,
-                              child: ElevatedButton.icon(
-                                onPressed: () async {
-                                  try {
-                                    await orderProvider.updateOrderStatus(
-                                      currentOrder['id'],
-                                      'in_progress',
-                                    );
-                                    await auth.setDriverStatus('busy');
-                                  } catch (e) {
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(SnackBar(content: Text('$e')));
-                                    }
-                                  }
-                                },
-                                icon: const Icon(Icons.play_arrow),
-                                label: Text(l10n.startTrip),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppTheme.statusFree,
-                                ),
-                              ),
-                            ),
-                          ),
-                        if (currentOrder['status'] == 'in_progress')
-                          Expanded(
-                            child: SizedBox(
-                              height: 52,
-                              child: ElevatedButton.icon(
-                                onPressed: () async {
-                                  try {
-                                    await orderProvider.updateOrderStatus(
-                                      currentOrder['id'],
-                                      'done',
-                                    );
-                                    await auth.setDriverStatus('free');
-                                  } catch (e) {
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(SnackBar(content: Text('$e')));
-                                    }
-                                  }
-                                },
-                                icon: const Icon(Icons.check),
-                                label: Text(l10n.finishTrip),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue,
-                                ),
-                              ),
-                            ),
-                          ),
-                        const SizedBox(width: 12),
-                        SizedBox(
-                          height: 52,
-                          child: IconButton.filled(
-                            onPressed: () => openMap(
-                              currentOrder['from_address'],
-                              currentOrder['to_address'],
-                            ),
-                            icon: const Icon(Icons.map),
-                          ),
+                    // Кнопка "Открыть в 2ГИС" - всегда видна для активного заказа
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton.icon(
+                        onPressed: () => openMap(
+                          currentOrder['from_address'],
+                          currentOrder['to_address'],
                         ),
-                      ],
+                        icon: const Icon(Icons.map),
+                        label: Text(l10n.openIn2GIS),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primary,
+                          foregroundColor: Colors.white,
+                        ),
+                      ),
                     ),
+                    if (currentOrder['status'] == 'accepted' ||
+                        currentOrder['status'] == 'in_progress') ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          if (currentOrder['status'] == 'accepted')
+                            Expanded(
+                              child: SizedBox(
+                                height: 52,
+                                child: ElevatedButton.icon(
+                                  onPressed: () async {
+                                    try {
+                                      await orderProvider.updateOrderStatus(
+                                        currentOrder['id'],
+                                        'in_progress',
+                                      );
+                                      await auth.setDriverStatus('busy');
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(SnackBar(content: Text('$e')));
+                                      }
+                                    }
+                                  },
+                                  icon: const Icon(Icons.play_arrow),
+                                  label: Text(l10n.startTrip),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.statusFree,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          if (currentOrder['status'] == 'in_progress')
+                            Expanded(
+                              child: SizedBox(
+                                height: 52,
+                                child: ElevatedButton.icon(
+                                  onPressed: () async {
+                                    try {
+                                      await orderProvider.updateOrderStatus(
+                                        currentOrder['id'],
+                                        'done',
+                                      );
+                                      await auth.setDriverStatus('free');
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(SnackBar(content: Text('$e')));
+                                      }
+                                    }
+                                  },
+                                  icon: const Icon(Icons.check),
+                                  label: Text(l10n.finishTrip),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.blue,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),

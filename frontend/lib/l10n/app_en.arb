@@ -57,5 +57,6 @@
   "driverAssigned": "Driver assigned",
   "ordersCompleted": "Orders completed",
   "ordersInProgress": "In progress",
-  "driverProfile": "Driver profile"
+  "driverProfile": "Driver profile",
+  "openIn2GIS": "Open in 2GIS"
 }

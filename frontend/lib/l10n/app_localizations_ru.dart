@@ -181,4 +181,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get driverProfile => 'Профиль водителя';
+
+  @override
+  String get openIn2GIS => 'Открыть в 2ГИС';
 }

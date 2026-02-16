@@ -181,4 +181,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get driverProfile => 'Driver profile';
+
+  @override
+  String get openIn2GIS => 'Open in 2GIS';
 }
