@@ -3,8 +3,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  // Use local IP for mobile device, localhost for Windows/Web
-  static const String baseUrl = 'http://192.168.1.178:8080';
+  // localhost для Web на том же ПК, 192.168.x.x для телефона в локальной сети
+  static const String baseUrl = 'http://127.0.0.1:8080';
 
   Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
@@ -15,14 +15,14 @@ class ApiService {
     final token = await getToken();
     return {
       'Content-Type': 'application/json',
-      if (token != null) 'Authorization': 'Bearer \$token',
+      if (token != null) 'Authorization': 'Bearer $token',
     };
   }
 
   // Auth
   Future<Map<String, dynamic>> login(String phone, String password) async {
     final response = await http.post(
-      Uri.parse('\$baseUrl/auth/login'),
+      Uri.parse('$baseUrl/auth/login'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({'phone': phone, 'password': password}),
     );
@@ -45,7 +45,7 @@ class ApiService {
     String role,
   ) async {
     final response = await http.post(
-      Uri.parse('\$baseUrl/auth/register'),
+      Uri.parse('$baseUrl/auth/register'),
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
         'name': name,
@@ -65,7 +65,7 @@ class ApiService {
   // Drivers
   Future<List<dynamic>> getDrivers() async {
     final response = await http.get(
-      Uri.parse('\$baseUrl/api/drivers'),
+      Uri.parse('$baseUrl/api/drivers'),
       headers: await _getHeaders(),
     );
 
@@ -76,9 +76,36 @@ class ApiService {
     }
   }
 
+  Future<void> createDriver(String name, String phone, String password) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/drivers'),
+      headers: await _getHeaders(),
+      body: jsonEncode({'name': name, 'phone': phone, 'password': password}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(_parseError(response));
+    }
+  }
+
+  Future<void> changePassword(String oldPassword, String newPassword) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/api/auth/change-password'),
+      headers: await _getHeaders(),
+      body: jsonEncode({
+        'old_password': oldPassword,
+        'new_password': newPassword,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(_parseError(response));
+    }
+  }
+
   Future<void> updateDriverStatus(String status) async {
     final response = await http.put(
-      Uri.parse('\$baseUrl/api/drivers/status'),
+      Uri.parse('$baseUrl/api/drivers/status'),
       headers: await _getHeaders(),
       body: jsonEncode({'status': status}),
     );
@@ -91,7 +118,7 @@ class ApiService {
   // Orders
   Future<List<dynamic>> getOrders() async {
     final response = await http.get(
-      Uri.parse('\$baseUrl/api/orders'),
+      Uri.parse('$baseUrl/api/orders'),
       headers: await _getHeaders(),
     );
 
@@ -109,7 +136,7 @@ class ApiService {
     int? driverId,
   ) async {
     final response = await http.post(
-      Uri.parse('\$baseUrl/api/orders'),
+      Uri.parse('$baseUrl/api/orders'),
       headers: await _getHeaders(),
       body: jsonEncode({
         'from_address': from,
@@ -124,9 +151,22 @@ class ApiService {
     }
   }
 
+  Future<void> assignOrderDriver(dynamic orderId, int driverId) async {
+    final id = orderId is int ? orderId : (orderId as num).toInt();
+    final response = await http.put(
+      Uri.parse('$baseUrl/api/orders/$id/assign'),
+      headers: await _getHeaders(),
+      body: jsonEncode({'driver_id': driverId}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(_parseError(response));
+    }
+  }
+
   Future<void> updateOrderStatus(int orderId, String status) async {
     final response = await http.put(
-      Uri.parse('\$baseUrl/api/orders/\$orderId/status'),
+      Uri.parse('$baseUrl/api/orders/$orderId/status'),
       headers: await _getHeaders(),
       body: jsonEncode({'status': status}),
     );
@@ -141,7 +181,7 @@ class ApiService {
       final decoded = jsonDecode(response.body);
       return decoded['error'] ?? 'Unknown error';
     } catch (_) {
-      return 'Error: \${response.statusCode}';
+      return 'Error: ${response.statusCode}';
     }
   }
 }
