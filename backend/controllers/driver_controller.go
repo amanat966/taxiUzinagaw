@@ -8,14 +8,42 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// GetDrivers lists all drivers with their status (Dispatcher only)
+// GetDrivers lists all drivers with their status and stats (Dispatcher only)
 func GetDrivers(c *gin.Context) {
 	var drivers []models.User
 	if err := database.DB.Where("role = ?", models.RoleDriver).Find(&drivers).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch drivers"})
 		return
 	}
-	c.JSON(http.StatusOK, drivers)
+	type driverWithStats struct {
+		ID                uint   `json:"id"`
+		Name              string `json:"name"`
+		Phone             string `json:"phone"`
+		Role              string `json:"role"`
+		DriverStatus      string `json:"driver_status"`
+		AvatarURL         string `json:"avatar_url,omitempty"`
+		CreatedAt         string `json:"created_at"`
+		OrdersDone        int64  `json:"orders_done"`
+		OrdersInProgress  int64  `json:"orders_in_progress"`
+	}
+	result := make([]driverWithStats, len(drivers))
+	for i, d := range drivers {
+		var done, inProgress int64
+		database.DB.Model(&models.Order{}).Where("driver_id = ? AND status = ?", d.ID, models.OrderDone).Count(&done)
+		database.DB.Model(&models.Order{}).Where("driver_id = ? AND status IN ?", d.ID, []models.OrderStatus{models.OrderAssigned, models.OrderAccepted, models.OrderInProgress}).Count(&inProgress)
+		result[i] = driverWithStats{
+			ID:               d.ID,
+			Name:             d.Name,
+			Phone:            d.Phone,
+			Role:             string(d.Role),
+			DriverStatus:     string(d.DriverStatus),
+			AvatarURL:        d.AvatarURL,
+			CreatedAt:        d.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			OrdersDone:       done,
+			OrdersInProgress: inProgress,
+		}
+	}
+	c.JSON(http.StatusOK, result)
 }
 
 type UpdateDriverStatusInput struct {

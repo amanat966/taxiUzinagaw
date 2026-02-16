@@ -24,6 +24,7 @@ type User struct {
 	Phone        string       `gorm:"uniqueIndex" json:"phone"`
 	Role         Role         `json:"role"`
 	DriverStatus DriverStatus `json:"driver_status"` // Only for drivers
+	AvatarURL    string       `json:"avatar_url,omitempty"` // URL фото (для будущей загрузки)
 	PasswordHash string       `json:"-"`
 	CreatedAt    time.Time    `json:"created_at"`
 }
