@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
+import 'l10n/app_localizations.dart';
 import 'providers/auth_provider.dart';
+import 'providers/locale_provider.dart';
 import 'providers/order_provider.dart';
+import 'theme/app_theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/dispatcher_home_screen.dart';
 import 'screens/driver_home_screen.dart';
@@ -10,6 +14,7 @@ void main() {
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => LocaleProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => OrderProvider()),
       ],
@@ -23,13 +28,27 @@ class TaxiFleetApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Taxi Fleet',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
-      ),
-      home: const AuthWrapper(),
+    return Consumer2<LocaleProvider, AuthProvider>(
+      builder: (context, localeProvider, auth, _) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'Taxi Fleet',
+          theme: AppTheme.lightTheme,
+          locale: localeProvider.locale,
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [
+            Locale('ru'),
+            Locale('kk'),
+            Locale('en'),
+          ],
+          home: const AuthWrapper(),
+        );
+      },
     );
   }
 }
@@ -49,7 +68,6 @@ class AuthWrapper extends StatelessWidget {
       }
     }
 
-    // Default or loading or login
     return const LoginScreen();
   }
 }
