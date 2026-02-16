@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 
@@ -29,7 +30,29 @@ func main() {
 		log.Fatal("Failed to migrate database:", err)
 	}
 
-	r := gin.Default()
+	// Seed initial admin if empty
+	database.Seed()
+
+	r := gin.New()
+	r.Use(gin.Recovery())
+	// Обработка OPTIONS ДО роутинга (httprouter не знает про OPTIONS)
+	r.Use(func(c *gin.Context) {
+		if c.Request.Method == "OPTIONS" {
+			c.Header("Access-Control-Allow-Origin", "*")
+			c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
+	})
+	r.Use(cors.New(cors.Config{
+		AllowAllOrigins:  true,
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Content-Length", "Accept-Encoding", "Authorization"},
+		AllowCredentials: false,
+	}))
+	r.Use(gin.Logger())
 
 	r.GET("/ping", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -44,17 +67,26 @@ func main() {
 		auth.POST("/login", controllers.Login)
 	}
 
+	// Auth routes requiring token
+	authProtected := r.Group("/api/auth")
+	authProtected.Use(middleware.AuthMiddleware())
+	{
+		authProtected.PUT("/change-password", controllers.ChangePassword)
+	}
+
 	// Protected Routes
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())
 	{
 		// Driver Routes
 		api.GET("/drivers", middleware.RoleMiddleware("dispatcher"), controllers.GetDrivers)
+		api.POST("/drivers", middleware.RoleMiddleware("dispatcher"), controllers.CreateDriver)
 		api.PUT("/drivers/status", middleware.RoleMiddleware("driver"), controllers.UpdateDriverStatus)
 
 		// Order Routes
 		api.POST("/orders", middleware.RoleMiddleware("dispatcher"), controllers.CreateOrder)
-		api.GET("/orders", controllers.GetOrders) // Both can view, filtered by role in controller
+		api.GET("/orders", controllers.GetOrders)
+		api.PUT("/orders/:id/assign", middleware.RoleMiddleware("dispatcher"), controllers.AssignDriver)
 		api.PUT("/orders/:id/status", controllers.UpdateOrderStatus)
 	}
 
