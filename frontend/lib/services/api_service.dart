@@ -115,6 +115,57 @@ class ApiService {
     }
   }
 
+  // Notifications
+  Future<void> updateFcmToken(String token) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/api/users/fcm-token'),
+      headers: await _getHeaders(),
+      body: jsonEncode({'token': token}),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(_parseError(response));
+    }
+  }
+
+  // Profile
+  Future<Map<String, dynamic>> getProfile() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/profile'),
+      headers: await _getHeaders(),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } else {
+      throw Exception(_parseError(response));
+    }
+  }
+
+  Future<Map<String, dynamic>> updateProfile({
+    String? name,
+    String? phone,
+    String? avatarBase64,
+  }) async {
+    final body = <String, dynamic>{
+      if (name != null) 'name': name,
+      if (phone != null) 'phone': phone,
+      if (avatarBase64 != null) 'avatar_base64': avatarBase64,
+    };
+
+    final response = await http.put(
+      Uri.parse('$baseUrl/api/profile'),
+      headers: await _getHeaders(),
+      body: jsonEncode(body),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body) as Map<String, dynamic>;
+    } else {
+      throw Exception(_parseError(response));
+    }
+  }
+
   // Orders
   Future<List<dynamic>> getOrders() async {
     final response = await http.get(
@@ -129,10 +180,26 @@ class ApiService {
     }
   }
 
+  Future<List<dynamic>> getOrderHistory() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/api/orders/history'),
+      headers: await _getHeaders(),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body);
+    } else {
+      throw Exception(_parseError(response));
+    }
+  }
+
   Future<Map<String, dynamic>> createOrder(
     String from,
     String to,
     String comment,
+    double price,
+    String clientName,
+    String clientPhone,
     int? driverId,
   ) async {
     final response = await http.post(
@@ -142,6 +209,9 @@ class ApiService {
         'from_address': from,
         'to_address': to,
         'comment': comment,
+        'price': price,
+        'client_name': clientName,
+        'client_phone': clientPhone,
         if (driverId != null) 'driver_id': driverId,
       }),
     );

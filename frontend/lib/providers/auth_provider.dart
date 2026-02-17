@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../services/api_service.dart';
+import '../services/push_service.dart';
 
 enum AuthStatus { unknown, authenticated, unauthenticated }
 
@@ -28,6 +30,8 @@ class AuthProvider with ChangeNotifier {
     if (token != null && userStr != null) {
       _user = jsonDecode(userStr);
       _status = AuthStatus.authenticated;
+      // Best-effort push token registration (if Firebase is configured).
+      unawaited(PushService.instance.registerCurrentToken());
     } else {
       _status = AuthStatus.unauthenticated;
     }
@@ -42,6 +46,9 @@ class AuthProvider with ChangeNotifier {
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('user', jsonEncode(_user));
+
+      // Best-effort push token registration (if Firebase is configured).
+      unawaited(PushService.instance.registerCurrentToken());
 
       notifyListeners();
     } catch (e) {
@@ -69,6 +76,13 @@ class AuthProvider with ChangeNotifier {
     _user = null;
     _status = AuthStatus.unauthenticated;
     notifyListeners();
+  }
+
+  Future<void> setUser(Map<String, dynamic> user) async {
+    _user = user;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('user', jsonEncode(_user));
   }
 
   Future<void> setDriverStatus(String status) async {

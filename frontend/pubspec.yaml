@@ -42,6 +42,10 @@ dependencies:
   text_scroll: ^0.2.1
   intl: any
   mask_text_input_formatter: ^2.9.0
+  firebase_core: ^4.4.0
+  firebase_messaging: ^16.1.1
+  fl_chart: ^1.1.1
+  image_picker: ^1.2.1
 
 dev_dependencies:
   flutter_test:

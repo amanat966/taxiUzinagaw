@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'l10n/app_localizations.dart';
 import 'providers/auth_provider.dart';
@@ -10,7 +11,13 @@ import 'screens/login_screen.dart';
 import 'screens/dispatcher_home_screen.dart';
 import 'screens/driver_home_screen.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp();
+  } catch (_) {
+    // Firebase config may be absent in dev environments; app still works without push.
+  }
   runApp(
     MultiProvider(
       providers: [
