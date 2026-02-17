@@ -9,7 +9,7 @@ class AppLocalizationsRu extends AppLocalizations {
   AppLocalizationsRu([String locale = 'ru']) : super(locale);
 
   @override
-  String get appTitle => 'Такси Узинагау';
+  String get appTitle => 'Такси Узынагаш';
 
   @override
   String get login => 'Войти';
@@ -108,10 +108,16 @@ class AppLocalizationsRu extends AppLocalizations {
   String get noActiveOrder => 'Нет активного заказа. Ожидание назначений...';
 
   @override
-  String get queue => 'Очередь';
+  String get newOrders => 'Новые заказы';
+
+  @override
+  String get noNewOrders => 'Новых заказов нет. Ожидание...';
 
   @override
   String get home => 'Главная';
+
+  @override
+  String get history => 'История';
 
   @override
   String get profile => 'Профиль';
@@ -184,4 +190,43 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get openIn2GIS => 'Открыть в 2ГИС';
+
+  @override
+  String get callClient => 'Позвонить';
+
+  @override
+  String get price => 'Цена';
+
+  @override
+  String get currencyKzt => 'тг';
+
+  @override
+  String get clientName => 'Имя клиента';
+
+  @override
+  String get clientPhone => 'Телефон клиента';
+
+  @override
+  String get historyComingSoon => 'История поездок скоро появится.';
+
+  @override
+  String get earnings => 'Заработок';
+
+  @override
+  String get last7Days => '7 дней';
+
+  @override
+  String get last30Days => '30 дней';
+
+  @override
+  String get completedTrips => 'Завершённые поездки';
+
+  @override
+  String get editProfile => 'Редактировать профиль';
+
+  @override
+  String get changePhoto => 'Сменить фото';
+
+  @override
+  String get noCompletedTrips => 'У вас пока нет завершенных поездок';
 }

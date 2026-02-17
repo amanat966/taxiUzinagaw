@@ -9,7 +9,7 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'Taxi Uzinagaw';
+  String get appTitle => 'Taxi Uzynagash';
 
   @override
   String get login => 'Login';
@@ -108,10 +108,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noActiveOrder => 'No active order. Waiting for assignments...';
 
   @override
-  String get queue => 'Queue';
+  String get newOrders => 'New orders';
+
+  @override
+  String get noNewOrders => 'No new orders. Waiting...';
 
   @override
   String get home => 'Home';
+
+  @override
+  String get history => 'History';
 
   @override
   String get profile => 'Profile';
@@ -184,4 +190,43 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get openIn2GIS => 'Open in 2GIS';
+
+  @override
+  String get callClient => 'Call';
+
+  @override
+  String get price => 'Price';
+
+  @override
+  String get currencyKzt => 'KZT';
+
+  @override
+  String get clientName => 'Client name';
+
+  @override
+  String get clientPhone => 'Client phone';
+
+  @override
+  String get historyComingSoon => 'Trip history is coming soon.';
+
+  @override
+  String get earnings => 'Earnings';
+
+  @override
+  String get last7Days => '7 days';
+
+  @override
+  String get last30Days => '30 days';
+
+  @override
+  String get completedTrips => 'Completed trips';
+
+  @override
+  String get editProfile => 'Edit profile';
+
+  @override
+  String get changePhoto => 'Change photo';
+
+  @override
+  String get noCompletedTrips => 'You don\'t have any completed trips yet';
 }

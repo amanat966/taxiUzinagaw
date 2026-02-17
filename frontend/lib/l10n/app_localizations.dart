@@ -103,7 +103,7 @@ abstract class AppLocalizations {
   /// No description provided for @appTitle.
   ///
   /// In ru, this message translates to:
-  /// **'Такси Узинагау'**
+  /// **'Такси Узынагаш'**
   String get appTitle;
 
   /// No description provided for @login.
@@ -298,17 +298,29 @@ abstract class AppLocalizations {
   /// **'Нет активного заказа. Ожидание назначений...'**
   String get noActiveOrder;
 
-  /// No description provided for @queue.
+  /// No description provided for @newOrders.
   ///
   /// In ru, this message translates to:
-  /// **'Очередь'**
-  String get queue;
+  /// **'Новые заказы'**
+  String get newOrders;
+
+  /// No description provided for @noNewOrders.
+  ///
+  /// In ru, this message translates to:
+  /// **'Новых заказов нет. Ожидание...'**
+  String get noNewOrders;
 
   /// No description provided for @home.
   ///
   /// In ru, this message translates to:
   /// **'Главная'**
   String get home;
+
+  /// No description provided for @history.
+  ///
+  /// In ru, this message translates to:
+  /// **'История'**
+  String get history;
 
   /// No description provided for @profile.
   ///
@@ -453,6 +465,84 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Открыть в 2ГИС'**
   String get openIn2GIS;
+
+  /// No description provided for @callClient.
+  ///
+  /// In ru, this message translates to:
+  /// **'Позвонить'**
+  String get callClient;
+
+  /// No description provided for @price.
+  ///
+  /// In ru, this message translates to:
+  /// **'Цена'**
+  String get price;
+
+  /// No description provided for @currencyKzt.
+  ///
+  /// In ru, this message translates to:
+  /// **'тг'**
+  String get currencyKzt;
+
+  /// No description provided for @clientName.
+  ///
+  /// In ru, this message translates to:
+  /// **'Имя клиента'**
+  String get clientName;
+
+  /// No description provided for @clientPhone.
+  ///
+  /// In ru, this message translates to:
+  /// **'Телефон клиента'**
+  String get clientPhone;
+
+  /// No description provided for @historyComingSoon.
+  ///
+  /// In ru, this message translates to:
+  /// **'История поездок скоро появится.'**
+  String get historyComingSoon;
+
+  /// No description provided for @earnings.
+  ///
+  /// In ru, this message translates to:
+  /// **'Заработок'**
+  String get earnings;
+
+  /// No description provided for @last7Days.
+  ///
+  /// In ru, this message translates to:
+  /// **'7 дней'**
+  String get last7Days;
+
+  /// No description provided for @last30Days.
+  ///
+  /// In ru, this message translates to:
+  /// **'30 дней'**
+  String get last30Days;
+
+  /// No description provided for @completedTrips.
+  ///
+  /// In ru, this message translates to:
+  /// **'Завершённые поездки'**
+  String get completedTrips;
+
+  /// No description provided for @editProfile.
+  ///
+  /// In ru, this message translates to:
+  /// **'Редактировать профиль'**
+  String get editProfile;
+
+  /// No description provided for @changePhoto.
+  ///
+  /// In ru, this message translates to:
+  /// **'Сменить фото'**
+  String get changePhoto;
+
+  /// No description provided for @noCompletedTrips.
+  ///
+  /// In ru, this message translates to:
+  /// **'У вас пока нет завершенных поездок'**
+  String get noCompletedTrips;
 }
 
 class _AppLocalizationsDelegate

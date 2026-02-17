@@ -23,10 +23,6 @@ class OrderProvider with ChangeNotifier {
     }
   }
 
-  List<dynamic> get queuedOrders {
-    return _orders.where((o) => o['status'] == 'assigned').toList();
-  }
-
   void startPolling() {
     _fetchData();
     _pollingTimer = Timer.periodic(Duration(seconds: 5), (timer) {
@@ -64,9 +60,20 @@ class OrderProvider with ChangeNotifier {
     String from,
     String to,
     String comment,
+    double price,
+    String clientName,
+    String clientPhone,
     int? driverId,
   ) async {
-    final order = await _apiService.createOrder(from, to, comment, driverId);
+    final order = await _apiService.createOrder(
+      from,
+      to,
+      comment,
+      price,
+      clientName,
+      clientPhone,
+      driverId,
+    );
     await _fetchData();
     return order;
   }

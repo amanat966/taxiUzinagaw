@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
 import '../providers/auth_provider.dart';
@@ -38,6 +40,13 @@ extension _OrderStatusLocalization on AppLocalizations {
         return offline;
     }
   }
+}
+
+String _formatMoneyKzt(dynamic v) {
+  final n = (v is num) ? v.toDouble() : double.tryParse(v?.toString() ?? '') ?? 0.0;
+  final fmt = NumberFormat.decimalPattern();
+  final value = (n % 1 == 0) ? fmt.format(n.toInt()) : NumberFormat('#,##0.##').format(n);
+  return value;
 }
 
 class DispatcherHomeScreen extends StatefulWidget {
@@ -399,7 +408,15 @@ class _DispatcherHomeScreenState extends State<DispatcherHomeScreen> {
     final fromCtrl = TextEditingController();
     final toCtrl = TextEditingController();
     final commentCtrl = TextEditingController();
+    final priceCtrl = TextEditingController();
+    final clientNameCtrl = TextEditingController();
+    final clientPhoneCtrl = TextEditingController();
     int? selectedDriverId;
+    final formKey = GlobalKey<FormState>();
+    final phoneMask = MaskTextInputFormatter(
+      mask: '+7 (###) ###-##-##',
+      filter: {'#': RegExp(r'[0-9]')},
+    );
 
     showDialog(
       context: context,
@@ -407,72 +424,139 @@ class _DispatcherHomeScreenState extends State<DispatcherHomeScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Text(l10n.createOrder),
         content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: fromCtrl,
-                decoration: InputDecoration(
-                  labelText: l10n.from,
-                  prefixIcon: const Icon(Icons.location_on),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: toCtrl,
-                decoration: InputDecoration(
-                  labelText: l10n.to,
-                  prefixIcon: const Icon(Icons.flag),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: commentCtrl,
-                decoration: InputDecoration(
-                  labelText: l10n.comment,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Consumer<OrderProvider>(
-                builder: (ctx, provider, _) {
-                  return DropdownButtonFormField<int>(
-                    decoration: InputDecoration(
-                      labelText: l10n.assignDriver,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
+          child: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: fromCtrl,
+                  decoration: InputDecoration(
+                    labelText: l10n.from,
+                    prefixIcon: const Icon(Icons.location_on),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    items: [
-                      DropdownMenuItem<int>(
-                        value: null,
-                        child: Text(l10n.none),
+                  ),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? l10n.requiredField : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: toCtrl,
+                  decoration: InputDecoration(
+                    labelText: l10n.to,
+                    prefixIcon: const Icon(Icons.flag),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? l10n.requiredField : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: priceCtrl,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(
+                      RegExp(r'^\d+([.,]\d{0,2})?$'),
+                    ),
+                  ],
+                  decoration: InputDecoration(
+                    labelText: l10n.price,
+                    prefixIcon: const Icon(Icons.payments_outlined),
+                    suffixText: l10n.currencyKzt,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    hintText: '10000',
+                  ),
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return l10n.requiredField;
+                    final normalized = v.trim().replaceAll(',', '.');
+                    final n = double.tryParse(normalized);
+                    if (n == null || n <= 0) return l10n.requiredField;
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: clientNameCtrl,
+                  decoration: InputDecoration(
+                    labelText: l10n.clientName,
+                    prefixIcon: const Icon(Icons.person_outline),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? l10n.requiredField : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: clientPhoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  inputFormatters: [phoneMask],
+                  decoration: InputDecoration(
+                    labelText: l10n.clientPhone,
+                    prefixIcon: const Icon(Icons.phone),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    hintText: '+7 (700) 000-00-00',
+                  ),
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return l10n.requiredField;
+                    final digits = v.replaceAll(RegExp(r'\D'), '');
+                    if (digits.length < 11) return l10n.requiredField;
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: commentCtrl,
+                  decoration: InputDecoration(
+                    labelText: l10n.comment,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Consumer<OrderProvider>(
+                  builder: (ctx, provider, _) {
+                    return DropdownButtonFormField<int>(
+                      decoration: InputDecoration(
+                        labelText: l10n.assignDriver,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
-                      ...provider.drivers.map((d) {
-                        final name = d['name'];
-                        final status = d['driver_status'];
-                        final l10n = AppLocalizations.of(context)!;
-                        return DropdownMenuItem<int>(
-                          value: d['id'],
-                          child: Text(
-                            '$name (${l10n.driverStatus(status ?? 'offline')})',
-                          ),
-                        );
-                      }),
-                    ],
-                    onChanged: (val) => selectedDriverId = val,
-                  );
-                },
-              ),
-            ],
+                      items: [
+                        DropdownMenuItem<int>(
+                          value: null,
+                          child: Text(l10n.none),
+                        ),
+                        ...provider.drivers.map((d) {
+                          final name = d['name'];
+                          final status = d['driver_status'];
+                          final l10n = AppLocalizations.of(context)!;
+                          return DropdownMenuItem<int>(
+                            value: d['id'],
+                            child: Text(
+                              '$name (${l10n.driverStatus(status ?? 'offline')})',
+                            ),
+                          );
+                        }),
+                      ],
+                      onChanged: (val) => selectedDriverId = val,
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ),
         actions: [
@@ -483,11 +567,18 @@ class _DispatcherHomeScreenState extends State<DispatcherHomeScreen> {
           ElevatedButton(
             onPressed: () async {
               try {
+                if (!formKey.currentState!.validate()) return;
+                final price = double.parse(priceCtrl.text.trim().replaceAll(',', '.'));
+                var phone = clientPhoneCtrl.text.replaceAll(RegExp(r'\D'), '');
+                if (phone.length == 10) phone = '7$phone';
                 await Provider.of<OrderProvider>(context, listen: false)
                     .createOrder(
                   fromCtrl.text,
                   toCtrl.text,
                   commentCtrl.text,
+                  price,
+                  clientNameCtrl.text.trim(),
+                  phone,
                   selectedDriverId,
                 );
                 if (context.mounted) {
@@ -672,6 +763,9 @@ class _DispatcherHomeScreenState extends State<DispatcherHomeScreen> {
                       from: o['from_address'],
                       to: o['to_address'],
                       status: o['status'],
+                      price: o['price'],
+                      clientName: o['client_name'],
+                      clientPhone: o['client_phone'],
                       driverName: o['driver']?['name'] ?? l10n.none,
                       driverId: o['driver_id'],
                       order: o,
@@ -933,6 +1027,9 @@ class _OrderCard extends StatelessWidget {
   final String from;
   final String to;
   final String status;
+  final dynamic price;
+  final dynamic clientName;
+  final dynamic clientPhone;
   final String driverName;
   final dynamic driverId;
   final dynamic order;
@@ -945,6 +1042,9 @@ class _OrderCard extends StatelessWidget {
     required this.from,
     required this.to,
     required this.status,
+    required this.price,
+    required this.clientName,
+    required this.clientPhone,
     required this.driverName,
     this.driverId,
     required this.order,
@@ -1016,6 +1116,75 @@ class _OrderCard extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 16),
+              // Клиент и цена
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.background,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(
+                        Icons.person_outline,
+                        color: AppTheme.primary,
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            (clientName ?? '').toString(),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: AppTheme.textPrimary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            (clientPhone ?? '').toString(),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textSecondary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: AppTheme.accent.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '${_formatMoneyKzt(price)} ${l10n.currencyKzt}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.accent,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
               // Адрес отправления

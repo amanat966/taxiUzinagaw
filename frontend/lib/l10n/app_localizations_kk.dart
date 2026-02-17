@@ -9,7 +9,7 @@ class AppLocalizationsKk extends AppLocalizations {
   AppLocalizationsKk([String locale = 'kk']) : super(locale);
 
   @override
-  String get appTitle => 'Такси Үзінағау';
+  String get appTitle => 'Такси Ұзынағаш';
 
   @override
   String get login => 'Кіру';
@@ -109,10 +109,16 @@ class AppLocalizationsKk extends AppLocalizations {
       'Белсенді тапсырыс жоқ. Тағайындауларды күтіңіз...';
 
   @override
-  String get queue => 'Кезек';
+  String get newOrders => 'Жаңа тапсырыстар';
+
+  @override
+  String get noNewOrders => 'Жаңа тапсырыс жоқ. Күту...';
 
   @override
   String get home => 'Басты бет';
+
+  @override
+  String get history => 'Тарих';
 
   @override
   String get profile => 'Профиль';
@@ -184,5 +190,44 @@ class AppLocalizationsKk extends AppLocalizations {
   String get driverProfile => 'Жүргізуші профилі';
 
   @override
-  String get openIn2GIS => 'Открыть в 2ГИС';
+  String get openIn2GIS => '2ГИС-та ашу';
+
+  @override
+  String get callClient => 'Қоңырау шалу';
+
+  @override
+  String get price => 'Бағасы';
+
+  @override
+  String get currencyKzt => 'тг';
+
+  @override
+  String get clientName => 'Клиент аты';
+
+  @override
+  String get clientPhone => 'Клиент телефоны';
+
+  @override
+  String get historyComingSoon => 'Сапар тарихы жақында қосылады.';
+
+  @override
+  String get earnings => 'Табыс';
+
+  @override
+  String get last7Days => '7 күн';
+
+  @override
+  String get last30Days => '30 күн';
+
+  @override
+  String get completedTrips => 'Аяқталған сапарлар';
+
+  @override
+  String get editProfile => 'Профильді өңдеу';
+
+  @override
+  String get changePhoto => 'Фотоны өзгерту';
+
+  @override
+  String get noCompletedTrips => 'Әзірге аяқталған сапарлар жоқ';
 }
