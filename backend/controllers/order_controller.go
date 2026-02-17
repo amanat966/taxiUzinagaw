@@ -1,11 +1,14 @@
 package controllers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"taxi-fleet-backend/database"
 	"taxi-fleet-backend/models"
+	"taxi-fleet-backend/utils"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -15,6 +18,9 @@ type CreateOrderInput struct {
 	FromAddress string `json:"from_address" binding:"required"`
 	ToAddress   string `json:"to_address" binding:"required"`
 	Comment     string `json:"comment"`
+	Price       float64 `json:"price" binding:"required"`
+	ClientName  string `json:"client_name" binding:"required"`
+	ClientPhone string `json:"client_phone" binding:"required"`
 	DriverID    *uint  `json:"driver_id"` // Optional, can be assigned later
 }
 
@@ -30,6 +36,9 @@ func CreateOrder(c *gin.Context) {
 		FromAddress: input.FromAddress,
 		ToAddress:   input.ToAddress,
 		Comment:     input.Comment,
+		Price:       input.Price,
+		ClientName:  input.ClientName,
+		ClientPhone: input.ClientPhone,
 		Status:      models.OrderNew,
 		DriverID:    input.DriverID,
 	}
@@ -42,6 +51,50 @@ func CreateOrder(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not create order"})
 		return
 	}
+
+	// Push notification (best-effort, async)
+	go func(created models.Order) {
+		serverKey := os.Getenv("FCM_SERVER_KEY")
+		if serverKey == "" {
+			return
+		}
+		var tokens []string
+
+		if created.DriverID != nil {
+			var driver models.User
+			if err := database.DB.First(&driver, *created.DriverID).Error; err == nil && driver.FcmToken != "" {
+				tokens = []string{driver.FcmToken}
+			}
+		} else {
+			var drivers []models.User
+			if err := database.DB.Where("role = ? AND fcm_token <> ''", models.RoleDriver).Find(&drivers).Error; err == nil {
+				for _, d := range drivers {
+					if d.FcmToken != "" {
+						tokens = append(tokens, d.FcmToken)
+					}
+				}
+			}
+		}
+
+		if len(tokens) == 0 {
+			return
+		}
+
+		title := "Новый заказ"
+		body := fmt.Sprintf("%s → %s, %.0f тг", created.FromAddress, created.ToAddress, created.Price)
+		data := map[string]any{
+			"type":        "new_order",
+			"order_id":    created.ID,
+			"from":        created.FromAddress,
+			"to":          created.ToAddress,
+			"price":       created.Price,
+			"client_name": created.ClientName,
+			"client_phone": created.ClientPhone,
+		}
+		if err := utils.SendFcmLegacyMulticast(serverKey, tokens, title, body, data); err != nil {
+			log.Printf("FCM send error: %v", err)
+		}
+	}(order)
 
 	c.JSON(http.StatusOK, order)
 }
@@ -59,10 +112,43 @@ func GetOrders(c *gin.Context) {
 			return
 		}
 	} else if role == string(models.RoleDriver) {
-		if err := database.DB.Where("driver_id = ? AND status IN ?", userID, []models.OrderStatus{models.OrderAssigned, models.OrderAccepted, models.OrderInProgress}).Find(&orders).Error; err != nil {
+		// Drivers should see:
+		// - orders assigned to them (assigned/accepted/in_progress)
+		// - unassigned "new" orders (driver_id IS NULL) so any driver can accept
+		if err := database.DB.
+			Where(
+				"(driver_id = ? AND status IN ?) OR (driver_id IS NULL AND status = ?)",
+				userID,
+				[]models.OrderStatus{models.OrderAssigned, models.OrderAccepted, models.OrderInProgress},
+				models.OrderNew,
+			).
+			Order("created_at DESC").
+			Find(&orders).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch orders"})
 			return
 		}
+	}
+
+	c.JSON(http.StatusOK, orders)
+}
+
+// GetOrderHistory lists completed orders for current driver
+func GetOrderHistory(c *gin.Context) {
+	userID, _ := c.Get("userID")
+	role, _ := c.Get("role")
+
+	if role != string(models.RoleDriver) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Forbidden"})
+		return
+	}
+
+	var orders []models.Order
+	if err := database.DB.
+		Where("driver_id = ? AND status = ?", userID, models.OrderDone).
+		Order("updated_at DESC").
+		Find(&orders).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch history"})
+		return
 	}
 
 	c.JSON(http.StatusOK, orders)
@@ -180,22 +266,71 @@ func UpdateOrderStatus(c *gin.Context) {
 			order.Status = input.Status
 		}
 	} else {
-		if order.DriverID == nil || *order.DriverID != userID.(uint) {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Not your order"})
-			return
-		}
-
 		switch input.Status {
 		case models.OrderAccepted:
+			// Driver can accept:
+			// - an order assigned to them (status=assigned, driver_id=user)
+			// - an unassigned new order (status=new, driver_id=NULL) -> claim it
+			driverUID := userID.(uint)
 			if order.Status == models.OrderAssigned {
+				if order.DriverID == nil || *order.DriverID != driverUID {
+					c.JSON(http.StatusForbidden, gin.H{"error": "Not your order"})
+					return
+				}
 				order.Status = models.OrderAccepted
+			} else if order.Status == models.OrderNew && order.DriverID == nil {
+				// claim with a transaction to avoid double-accept
+				tx := database.DB.Begin()
+				if tx.Error != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not accept order"})
+					return
+				}
+				res := tx.Model(&models.Order{}).
+					Where("id = ? AND status = ? AND driver_id IS NULL", order.ID, models.OrderNew).
+					Updates(map[string]any{
+						"driver_id":  driverUID,
+						"status":     models.OrderAccepted,
+						"updated_at": time.Now(),
+					})
+				if res.Error != nil {
+					tx.Rollback()
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not accept order"})
+					return
+				}
+				if res.RowsAffected == 0 {
+					tx.Rollback()
+					c.JSON(http.StatusBadRequest, gin.H{"error": "Order already accepted"})
+					return
+				}
+				if err := tx.Commit().Error; err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not accept order"})
+					return
+				}
+				// reload updated order
+				if err := database.DB.First(&order, order.ID).Error; err == nil {
+					c.JSON(http.StatusOK, order)
+					return
+				}
+				c.JSON(http.StatusOK, order)
+				return
+			} else {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid status transition"})
+				return
 			}
 		case models.OrderInProgress:
+			if order.DriverID == nil || *order.DriverID != userID.(uint) {
+				c.JSON(http.StatusForbidden, gin.H{"error": "Not your order"})
+				return
+			}
 			if order.Status == models.OrderAccepted {
 				order.Status = models.OrderInProgress
 				updateDriverStatus(*order.DriverID, models.StatusBusy)
 			}
 		case models.OrderDone:
+			if order.DriverID == nil || *order.DriverID != userID.(uint) {
+				c.JSON(http.StatusForbidden, gin.H{"error": "Not your order"})
+				return
+			}
 			if order.Status == models.OrderInProgress {
 				order.Status = models.OrderDone
 				updateDriverStatus(*order.DriverID, models.StatusFree)

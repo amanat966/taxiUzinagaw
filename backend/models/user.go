@@ -25,6 +25,7 @@ type User struct {
 	Role         Role         `json:"role"`
 	DriverStatus DriverStatus `json:"driver_status"` // Only for drivers
 	AvatarURL    string       `json:"avatar_url,omitempty"` // URL фото (для будущей загрузки)
+	FcmToken     string       `gorm:"column:fcm_token" json:"-"` // device token for push notifications
 	PasswordHash string       `json:"-"`
 	CreatedAt    time.Time    `json:"created_at"`
 }

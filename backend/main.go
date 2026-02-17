@@ -35,6 +35,10 @@ func main() {
 
 	r := gin.New()
 	r.Use(gin.Recovery())
+
+	// Static files (avatars etc.)
+	_ = os.MkdirAll("uploads/avatars", 0755)
+	r.Static("/static", "./uploads")
 	// Обработка OPTIONS ДО роутинга (httprouter не знает про OPTIONS)
 	r.Use(func(c *gin.Context) {
 		if c.Request.Method == "OPTIONS" {
@@ -79,6 +83,13 @@ func main() {
 	api := r.Group("/api")
 	api.Use(middleware.AuthMiddleware())
 	{
+		// Notifications / Device tokens
+		api.PUT("/users/fcm-token", controllers.UpdateFcmToken)
+
+		// Profile
+		api.GET("/profile", controllers.GetProfile)
+		api.PUT("/profile", controllers.UpdateProfile)
+
 		// Driver Routes
 		api.GET("/drivers", middleware.RoleMiddleware("dispatcher"), controllers.GetDrivers)
 		api.POST("/drivers", middleware.RoleMiddleware("dispatcher"), controllers.CreateDriver)
@@ -90,6 +101,7 @@ func main() {
 		{
 			ordersGroup.PUT("/:id/assign", middleware.RoleMiddleware("dispatcher"), controllers.AssignDriver)
 			ordersGroup.PUT("/:id/status", controllers.UpdateOrderStatus)
+			ordersGroup.GET("/history", middleware.RoleMiddleware("driver"), controllers.GetOrderHistory)
 			ordersGroup.POST("", middleware.RoleMiddleware("dispatcher"), controllers.CreateOrder)
 			ordersGroup.GET("", controllers.GetOrders)
 		}

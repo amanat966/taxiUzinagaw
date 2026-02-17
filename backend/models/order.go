@@ -20,6 +20,9 @@ type Order struct {
 	FromAddress string      `json:"from_address"`
 	ToAddress   string      `json:"to_address"`
 	Comment     string      `json:"comment"`
+	Price       float64     `json:"price"`        // in KZT (тенге)
+	ClientName  string      `json:"client_name"`  // customer name
+	ClientPhone string      `json:"client_phone"` // digits, e.g. 77001234567
 	DriverID    *uint       `json:"driver_id"`
 	Driver      *User       `json:"driver,omitempty"`
 	Status      OrderStatus `json:"status"`
