@@ -57,6 +57,16 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  min_sdk_android: 21
+  # NOTE: this path is on your PC (Cursor workspace storage).
+  # If you move the project to another machine, copy the icon into the repo
+  # (e.g. frontend/assets/app_icon.png) and update this path.
+  image_path: "assets/app_icon.png"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

@@ -1,6 +1,6 @@
 {
   "@@locale": "en",
-  "appTitle": "Taxi Uzynagash",
+  "appTitle": "Tulpar",
   "login": "Login",
   "phone": "Phone",
   "password": "Password",
@@ -73,5 +73,7 @@
   "completedTrips": "Completed trips",
   "editProfile": "Edit profile",
   "changePhoto": "Change photo",
-  "noCompletedTrips": "You don't have any completed trips yet"
+  "noCompletedTrips": "You don't have any completed trips yet",
+  "arrived": "Arrived",
+  "assignedOrder": "You have been assigned an order"
 }

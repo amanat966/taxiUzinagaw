@@ -1,6 +1,6 @@
 {
   "@@locale": "ru",
-  "appTitle": "Такси Узынагаш",
+  "appTitle": "Tulpar",
   "login": "Войти",
   "phone": "Телефон",
   "password": "Пароль",
@@ -73,5 +73,7 @@
   "completedTrips": "Завершённые поездки",
   "editProfile": "Редактировать профиль",
   "changePhoto": "Сменить фото",
-  "noCompletedTrips": "У вас пока нет завершенных поездок"
+  "noCompletedTrips": "У вас пока нет завершенных поездок",
+  "arrived": "На месте",
+  "assignedOrder": "Вам назначен заказ"
 }

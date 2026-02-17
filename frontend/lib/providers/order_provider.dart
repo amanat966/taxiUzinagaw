@@ -7,10 +7,35 @@ class OrderProvider with ChangeNotifier {
 
   List<dynamic> _drivers = [];
   List<dynamic> _orders = [];
+  final Set<int> _arrivedAtPickupOrderIds = {};
   Timer? _pollingTimer;
 
   List<dynamic> get drivers => _drivers;
   List<dynamic> get orders => _orders;
+
+  bool isArrivedAtPickup(dynamic orderId) {
+    final id = _normalizeOrderId(orderId);
+    if (id == null) return false;
+    return _arrivedAtPickupOrderIds.contains(id);
+  }
+
+  void markArrivedAtPickup(dynamic orderId, {bool arrived = true}) {
+    final id = _normalizeOrderId(orderId);
+    if (id == null) return;
+    if (arrived) {
+      _arrivedAtPickupOrderIds.add(id);
+    } else {
+      _arrivedAtPickupOrderIds.remove(id);
+    }
+    notifyListeners();
+  }
+
+  int? _normalizeOrderId(dynamic orderId) {
+    if (orderId == null) return null;
+    if (orderId is int) return orderId;
+    if (orderId is num) return orderId.toInt();
+    return int.tryParse(orderId.toString());
+  }
 
   // Active order for driver
   dynamic get currentOrder {
@@ -18,6 +43,15 @@ class OrderProvider with ChangeNotifier {
       return _orders.firstWhere(
         (o) => o['status'] == 'in_progress' || o['status'] == 'accepted',
       );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Заказ со статусом "назначен" (диспетчер назначил водителю, пока водитель может быть занят).
+  dynamic get assignedOrderWhileBusy {
+    try {
+      return _orders.firstWhere((o) => o['status'] == 'assigned');
     } catch (_) {
       return null;
     }
@@ -85,6 +119,9 @@ class OrderProvider with ChangeNotifier {
 
   Future<void> updateOrderStatus(int orderId, String status) async {
     await _apiService.updateOrderStatus(orderId, status);
+    if (status == 'done' || status == 'cancelled') {
+      _arrivedAtPickupOrderIds.remove(orderId);
+    }
     await _fetchData();
   }
 

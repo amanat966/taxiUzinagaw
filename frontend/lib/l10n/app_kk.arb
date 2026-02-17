@@ -1,6 +1,6 @@
 {
   "@@locale": "kk",
-  "appTitle": "Такси Ұзынағаш",
+  "appTitle": "Tulpar",
   "login": "Кіру",
   "phone": "Телефон",
   "password": "Құпия сөз",
@@ -73,5 +73,7 @@
   "completedTrips": "Аяқталған сапарлар",
   "editProfile": "Профильді өңдеу",
   "changePhoto": "Фотоны өзгерту",
-  "noCompletedTrips": "Әзірге аяқталған сапарлар жоқ"
+  "noCompletedTrips": "Әзірге аяқталған сапарлар жоқ",
+  "arrived": "Орнында",
+  "assignedOrder": "Сізге тапсырыс тағайындалды"
 }

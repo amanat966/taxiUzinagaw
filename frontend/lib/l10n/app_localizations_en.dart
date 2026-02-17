@@ -9,7 +9,7 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
-  String get appTitle => 'Taxi Uzynagash';
+  String get appTitle => 'Tulpar';
 
   @override
   String get login => 'Login';
@@ -229,4 +229,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get noCompletedTrips => 'You don\'t have any completed trips yet';
+
+  @override
+  String get arrived => 'Arrived';
+
+  @override
+  String get assignedOrder => 'You have been assigned an order';
 }

@@ -29,6 +29,7 @@ class DriverHomeScreen extends StatefulWidget {
 
 class _DriverHomeScreenState extends State<DriverHomeScreen> {
   int _selectedIndex = 0;
+  final Set<int> _shownAssignedOrderIds = {};
 
   @override
   void initState() {
@@ -43,41 +44,70 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   }
 
   void _openMap(String from, String to) async {
-    // Кодируем адреса для URL
-    final encodedFrom = Uri.encodeComponent(from);
-    final encodedTo = Uri.encodeComponent(to);
-    
-    // Пробуем сначала открыть мобильное приложение 2ГИС через deep link
-    final mobileUrl = Uri.parse('dgis://2gis.ru/route/$encodedFrom/$encodedTo');
-    
-    // Если мобильное приложение не установлено, используем веб-версию
-    final webUrl = Uri.parse(
-      'https://2gis.ru/routeSearch/rsType/car/from/$encodedFrom/to/$encodedTo',
-    );
-    
-    // Пробуем открыть мобильное приложение
-    if (await canLaunchUrl(mobileUrl)) {
-      try {
-        await launchUrl(mobileUrl, mode: LaunchMode.externalApplication);
-        return;
-      } catch (_) {
-        // Если не получилось, пробуем веб-версию
-      }
+    final safeFrom = from.trim();
+    final safeTo = to.trim();
+    if (safeTo.isEmpty) return;
+
+    // 2GIS deeplink: if "from" is omitted, 2GIS uses current device location.
+    // We use routeSearch format (works better than /route for our needs).
+    final encodedFrom = Uri.encodeComponent(safeFrom);
+    final encodedTo = Uri.encodeComponent(safeTo);
+
+    final Uri mobileUrl = safeFrom.isEmpty
+        ? Uri.parse('dgis://2gis.ru/routeSearch/rsType/car/to/$encodedTo')
+        : Uri.parse('dgis://2gis.ru/routeSearch/rsType/car/from/$encodedFrom/to/$encodedTo');
+
+    final Uri webUrl = safeFrom.isEmpty
+        ? Uri.parse('https://2gis.ru/routeSearch/rsType/car/to/$encodedTo')
+        : Uri.parse('https://2gis.ru/routeSearch/rsType/car/from/$encodedFrom/to/$encodedTo');
+
+    try {
+      await launchUrl(mobileUrl, mode: LaunchMode.externalApplication);
+      return;
+    } catch (_) {
+      // fallback to web
     }
-    
-    // Открываем веб-версию 2ГИС
-    if (await canLaunchUrl(webUrl)) {
+
+    try {
       await launchUrl(webUrl, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      // no-op
     }
   }
 
   Future<void> _callClient(String phone) async {
-    final digits = phone.replaceAll(RegExp(r'\D'), '');
+    final raw = phone.trim();
+    if (raw.isEmpty) return;
+
+    // Normalize phone for KZ/RU style inputs:
+    // - 8XXXXXXXXXX -> 7XXXXXXXXXX
+    // - XXXXXXXXXX  -> 7XXXXXXXXXX
+    // - 7XXXXXXXXXX -> 7XXXXXXXXXX
+    var digits = raw.replaceAll(RegExp(r'\D'), '');
     if (digits.isEmpty) return;
-    final normalized = digits.startsWith('7') ? digits : '7$digits';
-    final telUri = Uri(scheme: 'tel', path: '+$normalized');
-    if (await canLaunchUrl(telUri)) {
+    if (digits.length == 11 && digits.startsWith('8')) {
+      digits = '7${digits.substring(1)}';
+    } else if (digits.length == 10) {
+      digits = '7$digits';
+    }
+
+    final telUri = Uri(scheme: 'tel', path: '+$digits');
+    try {
       await launchUrl(telUri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      try {
+        await launchUrl(telUri, mode: LaunchMode.platformDefault);
+      } catch (_) {
+        if (mounted) {
+          final l10n = AppLocalizations.of(context)!;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('${l10n.callClient}: +$digits'),
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
+      }
     }
   }
 
@@ -167,12 +197,56 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     );
   }
 
+  void _maybeShowAssignedOrderDialog(
+    BuildContext context,
+    AppLocalizations l10n,
+    dynamic assignedOrder,
+  ) {
+    if (assignedOrder == null) return;
+    final id = _normalizeOrderId(assignedOrder['id']);
+    if (id == null || _shownAssignedOrderIds.contains(id)) return;
+    _shownAssignedOrderIds.add(id);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!context.mounted) return;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Text(l10n.assignedOrder),
+          content: Text(
+            '${assignedOrder['from_address'] ?? ''} → ${assignedOrder['to_address'] ?? ''}',
+            style: const TextStyle(fontSize: 16),
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(l10n.accept),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  int? _normalizeOrderId(dynamic orderId) {
+    if (orderId == null) return null;
+    if (orderId is int) return orderId;
+    if (orderId is num) return orderId.toInt();
+    return int.tryParse(orderId.toString());
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final auth = Provider.of<AuthProvider>(context);
     final orderProvider = Provider.of<OrderProvider>(context);
     final currentOrder = orderProvider.currentOrder;
+    final assignedOrder = orderProvider.assignedOrderWhileBusy;
+    final isBusy = (auth.user?['driver_status'] ?? '') == 'busy';
+    if (isBusy && assignedOrder != null) {
+      _maybeShowAssignedOrderDialog(context, l10n, assignedOrder);
+    }
 
     final pages = [
       _HomeTab(
@@ -340,675 +414,650 @@ class _HomeTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Card(
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            DriverStatusSection(
+              auth: auth,
+              orderProvider: orderProvider,
             ),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(20),
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Colors.white,
-                    AppTheme.background,
+            const SizedBox(height: 24),
+            if (currentOrder != null)
+              ...[
+                TripCard(order: currentOrder),
+                const SizedBox(height: 24),
+                PriceSection(price: currentOrder['price']),
+                const SizedBox(height: 24),
+                ActionButtons(
+                  status: (currentOrder['status'] ?? '').toString(),
+                  phone: (currentOrder['client_phone'] ?? '').toString(),
+                  onPrimaryPressed: () async {
+                    try {
+                      if (currentOrder['status'] == 'accepted') {
+                        // If driver starts trip, assume pickup is reached.
+                        orderProvider.markArrivedAtPickup(currentOrder['id'], arrived: true);
+                        await orderProvider.updateOrderStatus(
+                          currentOrder['id'],
+                          'in_progress',
+                        );
+                        await auth.setDriverStatus('busy');
+                      } else if (currentOrder['status'] == 'in_progress') {
+                        await orderProvider.updateOrderStatus(
+                          currentOrder['id'],
+                          'done',
+                        );
+                        await auth.setDriverStatus('free');
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('$e')),
+                        );
+                      }
+                    }
+                  },
+                  showArrivedButton: (currentOrder['status'] == 'accepted') &&
+                      !orderProvider.isArrivedAtPickup(currentOrder['id']),
+                  onArrivedPressed: () =>
+                      orderProvider.markArrivedAtPickup(currentOrder['id'], arrived: true),
+                  onCallPressed: (currentOrder['client_phone'] ?? '')
+                          .toString()
+                          .isNotEmpty
+                      ? () => callClient(
+                            (currentOrder['client_phone'] ?? '').toString(),
+                          )
+                      : null,
+                  onOpenMapPressed: () {
+                    final from = (currentOrder['from_address'] ?? '').toString();
+                    final to = (currentOrder['to_address'] ?? '').toString();
+                    final status = (currentOrder['status'] ?? '').toString();
+                    final arrived = orderProvider.isArrivedAtPickup(currentOrder['id']);
+                    final effectiveArrived = arrived || status == 'in_progress';
+
+                    // Before "На месте": current location -> A (pickup)
+                    // After "На месте": A -> B
+                    if (!effectiveArrived) {
+                      openMap('', from);
+                    } else {
+                      openMap(from, to);
+                    }
+                  },
+                ),
+              ]
+            else
+              ..._NewOrdersSection.build(context, orderProvider, openMap),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Статус водителя (карточка вверху экрана)
+class DriverStatusSection extends StatelessWidget {
+  final AuthProvider auth;
+  final OrderProvider orderProvider;
+
+  const DriverStatusSection({
+    super.key,
+    required this.auth,
+    required this.orderProvider,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white,
+              AppTheme.background,
+            ],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.status,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      auth.user?['driver_status'] == 'offline'
+                          ? l10n.offline
+                          : l10n.free,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
                   ],
                 ),
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
+              Transform.scale(
+                scale: 1.1,
+                child: Switch(
+                  value: auth.user?['driver_status'] != 'offline',
+                  activeColor: AppTheme.statusFree,
+                  activeTrackColor: AppTheme.statusFree.withOpacity(0.5),
+                  inactiveThumbColor: AppTheme.statusOffline,
+                  inactiveTrackColor: AppTheme.statusOffline.withOpacity(0.3),
+                  onChanged: (val) async {
+                    final newStatus = val ? 'free' : 'offline';
+                    try {
+                      await orderProvider.updateDriverStatus(newStatus);
+                      await auth.setDriverStatus(newStatus);
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('$e'),
+                            backgroundColor: AppTheme.statusBusy,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        );
+                      }
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Карточка маршрута и данных клиента
+class TripCard extends StatelessWidget {
+  final dynamic order;
+
+  const TripCard({super.key, required this.order});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final theme = Theme.of(context);
+    final phone = (order['client_phone'] ?? '').toString();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            gradient: AppTheme.primaryGradient,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Text(
+            l10n.currentOrder,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          elevation: 1,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _AddressRow(
+                  iconBackgroundColor: AppTheme.statusFree.withOpacity(0.15),
+                  iconColor: AppTheme.statusFree,
+                  icon: Icons.radio_button_checked,
+                  label: l10n.from,
+                  address: (order['from_address'] ?? '').toString(),
+                ),
+                const SizedBox(height: 20),
+                _AddressRow(
+                  iconBackgroundColor: AppTheme.statusBusy.withOpacity(0.15),
+                  iconColor: AppTheme.statusBusy,
+                  icon: Icons.flag,
+                  label: l10n.to,
+                  address: (order['to_address'] ?? '').toString(),
+                ),
+                const SizedBox(height: 20),
+                Row(
                   children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withOpacity(0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.person,
+                        color: AppTheme.primary,
+                        size: 18,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            l10n.status,
-                            style: const TextStyle(
-                              fontSize: 14,
-                              color: AppTheme.textSecondary,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            auth.user?['driver_status'] == 'offline'
-                                ? l10n.offline
-                                : l10n.free,
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
+                            (order['client_name'] ?? '').toString(),
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
                               color: AppTheme.textPrimary,
                             ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        ],
-                      ),
-                    ),
-                    Transform.scale(
-                      scale: 1.1,
-                      child: Switch(
-                        value: auth.user?['driver_status'] != 'offline',
-                        activeColor: AppTheme.statusFree,
-                        activeTrackColor: AppTheme.statusFree.withOpacity(0.5),
-                        inactiveThumbColor: AppTheme.statusOffline,
-                        inactiveTrackColor: AppTheme.statusOffline.withOpacity(0.3),
-                        onChanged: (val) async {
-                          final newStatus = val ? 'free' : 'offline';
-                          try {
-                            await orderProvider.updateDriverStatus(newStatus);
-                            await auth.setDriverStatus(newStatus);
-                          } catch (e) {
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text('$e'),
-                                  backgroundColor: AppTheme.statusBusy,
-                                  behavior: SnackBarBehavior.floating,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
+                          if (phone.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                phone,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: AppTheme.textSecondary,
+                                  fontWeight: FontWeight.w500,
                                 ),
-                              );
-                            }
-                          }
-                        },
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ],
                 ),
+                if ((order['comment'] ?? '').toString().isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Text(
+                    l10n.comment,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: AppTheme.textSecondary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    (order['comment'] ?? '').toString(),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AddressRow extends StatelessWidget {
+  final Color iconBackgroundColor;
+  final Color iconColor;
+  final IconData icon;
+  final String label;
+  final String address;
+
+  const _AddressRow({
+    required this.iconBackgroundColor,
+    required this.iconColor,
+    required this.icon,
+    required this.label,
+    required this.address,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 26,
+          height: 26,
+          decoration: BoxDecoration(
+            color: iconBackgroundColor,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(
+            icon,
+            color: iconColor,
+            size: 16,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontSize: 12,
+                  color: AppTheme.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                address,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Блок с ценой
+class PriceSection extends StatelessWidget {
+  final dynamic price;
+
+  const PriceSection({super.key, required this.price});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          l10n.price,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontSize: 13,
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${_formatMoneyKzt(price)} ${l10n.currencyKzt}',
+          style: const TextStyle(
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.statusFree,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Кнопки действий под заказом
+class ActionButtons extends StatelessWidget {
+  final String status;
+  final String phone;
+  final VoidCallback onPrimaryPressed;
+  final VoidCallback? onArrivedPressed;
+  final bool showArrivedButton;
+  final VoidCallback? onCallPressed;
+  final VoidCallback onOpenMapPressed;
+
+  const ActionButtons({
+    super.key,
+    required this.status,
+    required this.phone,
+    required this.onPrimaryPressed,
+    required this.onArrivedPressed,
+    required this.showArrivedButton,
+    required this.onCallPressed,
+    required this.onOpenMapPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+
+    final bool canCall = phone.isNotEmpty && onCallPressed != null;
+    final bool isAccepted = status == 'accepted';
+    final bool isInProgress = status == 'in_progress';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (showArrivedButton) ...[
+          OutlinedButton.icon(
+            onPressed: onArrivedPressed,
+            icon: const Icon(Icons.place_outlined, size: 20),
+            label: Text(l10n.arrived),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(52),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
               ),
             ),
           ),
-          const SizedBox(height: 24),
-
-          if (currentOrder != null) ...[
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    gradient: AppTheme.primaryGradient,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    l10n.currentOrder,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              ],
+          const SizedBox(height: 16),
+        ],
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: onPrimaryPressed,
+            icon: Icon(
+              isAccepted ? Icons.play_arrow : Icons.check,
+              size: 22,
             ),
-            const SizedBox(height: 16),
-            Card(
-              elevation: 0,
+            label: Text(
+              isAccepted ? l10n.startTrip : l10n.finishTrip,
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: isInProgress ? Colors.red : null,
+              foregroundColor: isInProgress ? Colors.white : null,
+              minimumSize: const Size.fromHeight(56),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(24),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      AppTheme.primary.withOpacity(0.05),
-                      AppTheme.primaryLight.withOpacity(0.02),
-                    ],
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Адрес отправления
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.04),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: AppTheme.statusFree.withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.location_on,
-                                color: AppTheme.statusFree,
-                                size: 22,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    l10n.from,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: AppTheme.textSecondary,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    currentOrder['from_address'],
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppTheme.textPrimary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Линия между адресами
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: Row(
-                          children: [
-                            const SizedBox(width: 19),
-                            Container(
-                              width: 2,
-                              height: 20,
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  begin: Alignment.topCenter,
-                                  end: Alignment.bottomCenter,
-                                  colors: [
-                                    AppTheme.primary.withOpacity(0.3),
-                                    AppTheme.primary.withOpacity(0.1),
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Адрес назначения
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.04),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: AppTheme.statusBusy.withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.flag,
-                                color: AppTheme.statusBusy,
-                                size: 22,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    l10n.to,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: AppTheme.textSecondary,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    currentOrder['to_address'],
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppTheme.textPrimary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      // Клиент и цена
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.04),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: AppTheme.primary.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: const Icon(
-                                Icons.person,
-                                color: AppTheme.primary,
-                                size: 22,
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    (currentOrder['client_name'] ?? '').toString(),
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                      color: AppTheme.textPrimary,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    (currentOrder['client_phone'] ?? '').toString(),
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: AppTheme.textSecondary,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppTheme.accent.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                '${_formatMoneyKzt(currentOrder['price'])} ${l10n.currencyKzt}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  color: AppTheme.accent,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if ((currentOrder['comment'] ?? '').isNotEmpty) ...[
-                        const SizedBox(height: 14),
-                        Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: AppTheme.accent.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: AppTheme.accent.withOpacity(0.2),
-                              width: 1,
-                            ),
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(
-                                Icons.note_outlined,
-                                color: AppTheme.accent,
-                                size: 18,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      l10n.comment,
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: AppTheme.textSecondary,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      currentOrder['comment'],
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        color: AppTheme.textPrimary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 20),
-                      // Кнопка "Открыть в 2ГИС"
-                      Container(
-                        decoration: BoxDecoration(
-                          gradient: AppTheme.primaryGradient,
-                          borderRadius: BorderRadius.circular(16),
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppTheme.primary.withOpacity(0.3),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
-                            ),
-                          ],
-                        ),
-                        child: ElevatedButton.icon(
-                          onPressed: () => openMap(
-                            currentOrder['from_address'],
-                            currentOrder['to_address'],
-                          ),
-                          icon: Image.asset(
-                            'assets/images/2gis.png',
-                            width: 20,
-                            height: 20,
-                          ),
-                          label: Text(
-                            l10n.openIn2GIS,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.transparent,
-                            foregroundColor: Colors.white,
-                            shadowColor: Colors.transparent,
-                            minimumSize: const Size.fromHeight(54),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                          ),
-                        ),
-                      ),
-                      if ((currentOrder['client_phone'] ?? '').toString().isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        Container(
-                          decoration: BoxDecoration(
-                            gradient: AppTheme.successGradient,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppTheme.statusFree.withOpacity(0.25),
-                                blurRadius: 12,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: ElevatedButton.icon(
-                            onPressed: () => callClient(
-                              (currentOrder['client_phone'] ?? '').toString(),
-                            ),
-                            icon: const Icon(Icons.phone_in_talk, size: 20),
-                            label: Text(
-                              l10n.callClient,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.transparent,
-                              foregroundColor: Colors.white,
-                              shadowColor: Colors.transparent,
-                              minimumSize: const Size.fromHeight(54),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                      if (currentOrder['status'] == 'accepted' ||
-                          currentOrder['status'] == 'in_progress') ...[
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            if (currentOrder['status'] == 'accepted')
-                              Expanded(
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    gradient: AppTheme.successGradient,
-                                    borderRadius: BorderRadius.circular(16),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: AppTheme.statusFree.withOpacity(0.3),
-                                        blurRadius: 12,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
-                                  child: ElevatedButton.icon(
-                                    onPressed: () async {
-                                      try {
-                                        await orderProvider.updateOrderStatus(
-                                          currentOrder['id'],
-                                          'in_progress',
-                                        );
-                                        await auth.setDriverStatus('busy');
-                                      } catch (e) {
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(SnackBar(content: Text('$e')));
-                                        }
-                                      }
-                                    },
-                                    icon: const Icon(Icons.play_arrow, size: 20),
-                                    label: Text(l10n.startTrip),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.transparent,
-                                      foregroundColor: Colors.white,
-                                      shadowColor: Colors.transparent,
-                                      minimumSize: const Size.fromHeight(54),
-                                      padding: const EdgeInsets.symmetric(vertical: 14),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            if (currentOrder['status'] == 'in_progress')
-                              Expanded(
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue,
-                                    borderRadius: BorderRadius.circular(16),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.blue.withOpacity(0.3),
-                                        blurRadius: 12,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
-                                  child: ElevatedButton.icon(
-                                    onPressed: () async {
-                                      try {
-                                        await orderProvider.updateOrderStatus(
-                                          currentOrder['id'],
-                                          'done',
-                                        );
-                                        await auth.setDriverStatus('free');
-                                      } catch (e) {
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(context)
-                                              .showSnackBar(SnackBar(content: Text('$e')));
-                                        }
-                                      }
-                                    },
-                                    icon: const Icon(Icons.check, size: 20),
-                                    label: Text(l10n.finishTrip),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.transparent,
-                                      foregroundColor: Colors.white,
-                                      shadowColor: Colors.transparent,
-                                      minimumSize: const Size.fromHeight(54),
-                                      padding: const EdgeInsets.symmetric(vertical: 14),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+                borderRadius: BorderRadius.circular(16),
               ),
             ),
-          ] else ...[
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    gradient: AppTheme.primaryGradient,
-                    borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            if (canCall) ...[
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onCallPressed,
+                  icon: const Icon(Icons.phone_in_talk, size: 18),
+                  label: Text(
+                    l10n.callClient,
+                    style: const TextStyle(fontSize: 14),
                   ),
-                  child: Text(
-                    l10n.newOrders,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Builder(
-              builder: (context) {
-                final newOrders = orderProvider.orders
-                    .where((o) => o['status'] == 'new' || o['status'] == 'assigned')
-                    .toList();
-
-                if (newOrders.isEmpty) {
-                  return Card(
-                    elevation: 2,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(52),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Column(
-                        children: [
-                          Icon(Icons.inbox_outlined,
-                              size: 64, color: Colors.grey[400]),
-                          const SizedBox(height: 16),
-                          Text(
-                            l10n.noNewOrders,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 16,
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-
-                return Column(
-                  children: newOrders
-                      .map(
-                        (o) => _NewOrderCard(
-                          order: o,
-                          l10n: l10n,
-                          onOpenMap: () => openMap(
-                            o['from_address'],
-                            o['to_address'],
-                          ),
-                          onAccept: () async {
-                            try {
-                              await orderProvider.updateOrderStatus(
-                                o['id'],
-                                'accepted',
-                              );
-                            } catch (e) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('$e')),
-                                );
-                              }
-                            }
-                          },
-                        ),
-                      )
-                      .toList(),
-                );
-              },
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: onOpenMapPressed,
+                icon: Image.asset(
+                  'assets/images/2gis.png',
+                  width: 18,
+                  height: 18,
+                ),
+                label: Text(
+                  l10n.openIn2GIS,
+                  style: const TextStyle(fontSize: 14),
+                ),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+              ),
             ),
           ],
+        ),
+      ],
+    );
+  }
+}
+
+/// Секция со списком новых заказов (оставлена как вспомогательный helper)
+class _NewOrdersSection {
+  static List<Widget> build(
+    BuildContext context,
+    OrderProvider orderProvider,
+    void Function(String, String) openMap,
+  ) {
+    final l10n = AppLocalizations.of(context)!;
+    final newOrders = orderProvider.orders
+        .where((o) => o['status'] == 'new' || o['status'] == 'assigned')
+        .toList();
+
+    if (newOrders.isEmpty) {
+      return [
+        Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                gradient: AppTheme.primaryGradient,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                l10n.newOrders,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Card(
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.inbox_outlined,
+                  size: 64,
+                  color: Colors.grey[400],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  l10n.noNewOrders,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.grey[600],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ];
+    }
+
+    return [
+      Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              gradient: AppTheme.primaryGradient,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              l10n.newOrders,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
         ],
       ),
-    );
+      const SizedBox(height: 16),
+      Column(
+        children: newOrders
+            .map(
+              (o) => _NewOrderCard(
+                order: o,
+                l10n: l10n,
+                onOpenMap: () => openMap(
+                  o['from_address'],
+                  o['to_address'],
+                ),
+                onAccept: () async {
+                  try {
+                    await orderProvider.updateOrderStatus(
+                      o['id'],
+                      'accepted',
+                    );
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('$e')),
+                      );
+                    }
+                  }
+                },
+              ),
+            )
+            .toList(),
+      ),
+    ];
   }
 }
 

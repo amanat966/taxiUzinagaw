@@ -9,7 +9,7 @@ class AppLocalizationsKk extends AppLocalizations {
   AppLocalizationsKk([String locale = 'kk']) : super(locale);
 
   @override
-  String get appTitle => 'Такси Ұзынағаш';
+  String get appTitle => 'Tulpar';
 
   @override
   String get login => 'Кіру';
@@ -230,4 +230,10 @@ class AppLocalizationsKk extends AppLocalizations {
 
   @override
   String get noCompletedTrips => 'Әзірге аяқталған сапарлар жоқ';
+
+  @override
+  String get arrived => 'Орнында';
+
+  @override
+  String get assignedOrder => 'Сізге тапсырыс тағайындалды';
 }
