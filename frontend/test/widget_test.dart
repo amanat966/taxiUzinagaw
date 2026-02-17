@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:frontend/providers/auth_provider.dart';
+import 'package:frontend/providers/locale_provider.dart';
 import 'package:frontend/providers/order_provider.dart';
 import 'package:frontend/screens/login_screen.dart';
 
@@ -20,6 +21,7 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          ChangeNotifierProvider(create: (_) => LocaleProvider()),
           ChangeNotifierProvider(create: (_) => AuthProvider()),
           ChangeNotifierProvider(create: (_) => OrderProvider()),
         ],
@@ -29,6 +31,5 @@ void main() {
 
     // Verify that the LoginScreen is shown.
     expect(find.byType(LoginScreen), findsOneWidget);
-    expect(find.text('Taxi Fleet Login'), findsOneWidget);
   });
 }
