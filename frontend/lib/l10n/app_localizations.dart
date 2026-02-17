@@ -103,7 +103,7 @@ abstract class AppLocalizations {
   /// No description provided for @appTitle.
   ///
   /// In ru, this message translates to:
-  /// **'Такси Узинагау'**
+  /// **'Tulpar'**
   String get appTitle;
 
   /// No description provided for @login.
@@ -453,6 +453,30 @@ abstract class AppLocalizations {
   /// In ru, this message translates to:
   /// **'Открыть в 2ГИС'**
   String get openIn2GIS;
+
+  /// No description provided for @call.
+  ///
+  /// In ru, this message translates to:
+  /// **'Позвонить'**
+  String get call;
+
+  /// No description provided for @atLocation.
+  ///
+  /// In ru, this message translates to:
+  /// **'На месте'**
+  String get atLocation;
+
+  /// No description provided for @orderAssignedNotification.
+  ///
+  /// In ru, this message translates to:
+  /// **'Диспетчер назначил вам заказ'**
+  String get orderAssignedNotification;
+
+  /// No description provided for @noPhoneToCall.
+  ///
+  /// In ru, this message translates to:
+  /// **'Нет номера для звонка'**
+  String get noPhoneToCall;
 }
 
 class _AppLocalizationsDelegate

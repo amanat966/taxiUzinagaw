@@ -32,7 +32,7 @@ class TaxiFleetApp extends StatelessWidget {
       builder: (context, localeProvider, auth, _) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
-          title: 'Taxi Fleet',
+          title: 'Tulpar',
           theme: AppTheme.lightTheme,
           locale: localeProvider.locale,
           localizationsDelegates: const [

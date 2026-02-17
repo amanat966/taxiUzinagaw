@@ -16,6 +16,8 @@ class DriverHomeScreen extends StatefulWidget {
 
 class _DriverHomeScreenState extends State<DriverHomeScreen> {
   int _selectedIndex = 0;
+  final Set<int> _driverAtPickupOrderIds = {};
+  Set<int> _previousAssignedOrderIds = {};
 
   @override
   void initState() {
@@ -55,6 +57,53 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     // Открываем веб-версию 2ГИС
     if (await canLaunchUrl(webUrl)) {
       await launchUrl(webUrl, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  /// Маршрут от текущего местоположения до точки назначения (2ГИС использует GPS)
+  void _openMapFromCurrentLocation(String to) async {
+    final encodedTo = Uri.encodeComponent(to);
+    final mobileUrl = Uri.parse(
+      'dgis://2gis.ru/routeSearch/rsType/car/to/$encodedTo',
+    );
+    final webUrl = Uri.parse(
+      'https://2gis.ru/routeSearch/rsType/car/to/$encodedTo',
+    );
+    if (await canLaunchUrl(mobileUrl)) {
+      try {
+        await launchUrl(mobileUrl, mode: LaunchMode.externalApplication);
+        return;
+      } catch (_) {}
+    }
+    if (await canLaunchUrl(webUrl)) {
+      await launchUrl(webUrl, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  void _launchCall(String phone) async {
+    final digits = phone.replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.noPhoneToCall),
+            backgroundColor: AppTheme.statusBusy,
+          ),
+        );
+      }
+      return;
+    }
+    final tel = digits.length == 10 ? '7$digits' : digits;
+    final uri = Uri.parse('tel:$tel');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.noPhoneToCall),
+          backgroundColor: AppTheme.statusBusy,
+        ),
+      );
     }
   }
 
@@ -152,6 +201,52 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     final currentOrder = orderProvider.currentOrder;
     final queue = orderProvider.queuedOrders;
 
+    // Уведомление водителю при назначении заказа (когда занят)
+    final currentAssignedIds = queue.map((o) => o['id'] as int).toSet();
+    if (auth.user?['driver_status'] == 'busy' &&
+        currentAssignedIds.isNotEmpty &&
+        currentAssignedIds.difference(_previousAssignedOrderIds).isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _previousAssignedOrderIds = currentAssignedIds;
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (ctx) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                Icon(Icons.notifications_active, color: AppTheme.primary),
+                const SizedBox(width: 12),
+                Expanded(child: Text(l10n.orderAssignedNotification)),
+              ],
+            ),
+            content: Text(
+              '${l10n.from}: ${queue.first['from_address']}\n${l10n.to}: ${queue.first['to_address']}',
+              style: const TextStyle(fontSize: 14),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(l10n.cancel),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  setState(() => _selectedIndex = 1);
+                },
+                child: Text(l10n.accept),
+              ),
+            ],
+          ),
+        );
+      });
+    } else if (currentAssignedIds.isNotEmpty) {
+      _previousAssignedOrderIds = currentAssignedIds;
+    } else {
+      _previousAssignedOrderIds = {};
+    }
+
     final pages = [
       _HomeTab(
         auth: auth,
@@ -159,6 +254,11 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         currentOrder: currentOrder,
         queue: queue,
         openMap: _openMap,
+        openMapFromCurrent: _openMapFromCurrentLocation,
+        launchCall: _launchCall,
+        driverAtPickupOrderIds: _driverAtPickupOrderIds,
+        onAtLocation: (orderId) =>
+            setState(() => _driverAtPickupOrderIds.add(orderId)),
       ),
       _QueueTab(queue: queue, orderProvider: orderProvider),
       _ProfileTab(
@@ -305,6 +405,10 @@ class _HomeTab extends StatelessWidget {
   final dynamic currentOrder;
   final List<dynamic> queue;
   final void Function(String, String) openMap;
+  final void Function(String) openMapFromCurrent;
+  final void Function(String) launchCall;
+  final Set<int> driverAtPickupOrderIds;
+  final void Function(int) onAtLocation;
 
   const _HomeTab({
     required this.auth,
@@ -312,6 +416,10 @@ class _HomeTab extends StatelessWidget {
     required this.currentOrder,
     required this.queue,
     required this.openMap,
+    required this.openMapFromCurrent,
+    required this.launchCall,
+    required this.driverAtPickupOrderIds,
+    required this.onAtLocation,
   });
 
   @override
@@ -637,7 +745,7 @@ class _HomeTab extends StatelessWidget {
                         ),
                       ],
                       const SizedBox(height: 20),
-                      // Кнопка "Открыть в 2ГИС"
+                      // Кнопка "Открыть в 2ГИС" — маршрут: местоположение→А (до "На месте"), А→Б (после)
                       Container(
                         decoration: BoxDecoration(
                           gradient: AppTheme.primaryGradient,
@@ -651,10 +759,18 @@ class _HomeTab extends StatelessWidget {
                           ],
                         ),
                         child: ElevatedButton.icon(
-                          onPressed: () => openMap(
-                            currentOrder['from_address'],
-                            currentOrder['to_address'],
-                          ),
+                          onPressed: () {
+                            final fromAddr = currentOrder['from_address'];
+                            final toAddr = currentOrder['to_address'];
+                            final status = currentOrder['status'];
+                            final orderId = currentOrder['id'] as int;
+                            final isAtPickup = driverAtPickupOrderIds.contains(orderId);
+                            if (status == 'accepted' && !isAtPickup) {
+                              openMapFromCurrent(fromAddr);
+                            } else {
+                              openMap(fromAddr, toAddr);
+                            }
+                          },
                           icon: const Icon(Icons.map, size: 20),
                           label: Text(
                             l10n.openIn2GIS,
@@ -674,6 +790,49 @@ class _HomeTab extends StatelessWidget {
                           ),
                         ),
                       ),
+                      // Кнопка "Позвонить" — клиент/пассажир
+                      if ((currentOrder['client_phone'] ?? currentOrder['from_phone'] ?? currentOrder['phone'] ?? '').toString().trim().isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: () => launchCall(
+                            (currentOrder['client_phone'] ?? currentOrder['from_phone'] ?? currentOrder['phone'] ?? '').toString(),
+                          ),
+                          icon: const Icon(Icons.phone, size: 20),
+                          label: Text(l10n.call),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
+                        ),
+                      ],
+                      // Кнопка "На месте" — водитель прибыл в точку А
+                      if (currentOrder['status'] == 'accepted' &&
+                          !driverAtPickupOrderIds.contains(currentOrder['id'] as int)) ...[
+                        const SizedBox(height: 10),
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppTheme.accent.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppTheme.accent),
+                          ),
+                          child: ElevatedButton.icon(
+                            onPressed: () => onAtLocation(currentOrder['id'] as int),
+                            icon: const Icon(Icons.location_on, size: 20),
+                            label: Text(l10n.atLocation),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              foregroundColor: AppTheme.textPrimary,
+                              shadowColor: Colors.transparent,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                       if (currentOrder['status'] == 'accepted' ||
                           currentOrder['status'] == 'in_progress') ...[
                         const SizedBox(height: 10),
@@ -726,11 +885,11 @@ class _HomeTab extends StatelessWidget {
                               Expanded(
                                 child: Container(
                                   decoration: BoxDecoration(
-                                    color: Colors.blue,
+                                    color: AppTheme.statusBusy,
                                     borderRadius: BorderRadius.circular(16),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.blue.withOpacity(0.3),
+                                        color: AppTheme.statusBusy.withOpacity(0.3),
                                         blurRadius: 12,
                                         offset: const Offset(0, 4),
                                       ),

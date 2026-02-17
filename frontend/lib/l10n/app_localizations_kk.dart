@@ -9,7 +9,7 @@ class AppLocalizationsKk extends AppLocalizations {
   AppLocalizationsKk([String locale = 'kk']) : super(locale);
 
   @override
-  String get appTitle => 'Такси Үзінағау';
+  String get appTitle => 'Tulpar';
 
   @override
   String get login => 'Кіру';
@@ -184,5 +184,18 @@ class AppLocalizationsKk extends AppLocalizations {
   String get driverProfile => 'Жүргізуші профилі';
 
   @override
-  String get openIn2GIS => 'Открыть в 2ГИС';
+  String get openIn2GIS => '2ГИС-те ашу';
+
+  @override
+  String get call => 'Қоңырау шалыңыз';
+
+  @override
+  String get atLocation => 'Орнында';
+
+  @override
+  String get orderAssignedNotification =>
+      'Диспетчер сізге тапсырыс тағайындады';
+
+  @override
+  String get noPhoneToCall => 'Қоңырау үшін нөмір жоқ';
 }

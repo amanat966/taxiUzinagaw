@@ -9,7 +9,7 @@ class AppLocalizationsRu extends AppLocalizations {
   AppLocalizationsRu([String locale = 'ru']) : super(locale);
 
   @override
-  String get appTitle => 'Такси Узинагау';
+  String get appTitle => 'Tulpar';
 
   @override
   String get login => 'Войти';
@@ -184,4 +184,16 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get openIn2GIS => 'Открыть в 2ГИС';
+
+  @override
+  String get call => 'Позвонить';
+
+  @override
+  String get atLocation => 'На месте';
+
+  @override
+  String get orderAssignedNotification => 'Диспетчер назначил вам заказ';
+
+  @override
+  String get noPhoneToCall => 'Нет номера для звонка';
 }

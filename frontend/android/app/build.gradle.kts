@@ -37,6 +37,15 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+    applicationVariants.all {
+        if (buildType.name == "release") {
+            outputs.all {
+                val outputImpl = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
+                outputImpl.outputFileName = "tulpar_taxi_v1.0.apk"
+            }
+        }
+    }
+
 }
 
 flutter {
