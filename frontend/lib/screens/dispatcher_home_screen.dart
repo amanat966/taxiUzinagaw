@@ -255,7 +255,11 @@ class _DispatcherHomeScreenState extends State<DispatcherHomeScreen> {
               backgroundColor: AppTheme.primary.withOpacity(0.2),
               radius: 48,
               backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
-                  ? NetworkImage(avatarUrl)
+                  ? NetworkImage(
+                      avatarUrl.startsWith('http')
+                          ? avatarUrl
+                          : '${ApiService.baseUrl}$avatarUrl',
+                    )
                   : null,
               child: (avatarUrl == null || avatarUrl.isEmpty)
                   ? Text(
@@ -934,7 +938,13 @@ class _DriverCard extends StatelessWidget {
                     CircleAvatar(
                       backgroundColor: AppTheme.primary.withOpacity(0.1),
                       radius: 26,
-                      backgroundImage: hasPhoto ? NetworkImage(avatarUrl!) : null,
+                      backgroundImage: hasPhoto
+                          ? NetworkImage(
+                              avatarUrl!.startsWith('http')
+                                  ? avatarUrl!
+                                  : '${ApiService.baseUrl}$avatarUrl',
+                            )
+                          : null,
                       child: hasPhoto
                           ? null
                           : Text(

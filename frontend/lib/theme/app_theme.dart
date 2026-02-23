@@ -1,18 +1,25 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // Современная цветовая палитра для такси-приложения
-  static const Color primary = Color(0xFF1A73E8); // Яркий синий
-  static const Color primaryDark = Color(0xFF1557B0);
-  static const Color primaryLight = Color(0xFF4285F4);
-  static const Color secondary = Color(0xFF34A853); // Зеленый для успешных действий
-  static const Color accent = Color(0xFFFBBC04); // Желтый акцент
-  static const Color background = Color(0xFFF8F9FA); // Светло-серый фон
+  // Brand palette (from provided reference)
+  static const Color brand900 = Color(0xFF021024);
+  static const Color brand800 = Color(0xFF052659);
+  static const Color brand500 = Color(0xFF5483B3);
+  static const Color brand300 = Color(0xFF7DA0CA);
+  static const Color brand100 = Color(0xFFC1E8FF);
+
+  // Основная палитра приложения
+  static const Color primary = brand800;
+  static const Color primaryDark = brand900;
+  static const Color primaryLight = brand500;
+  static const Color secondary = brand300;
+  static const Color accent = brand100;
+  static const Color background = brand100;
   static const Color surface = Colors.white;
   static const Color cardBackground = Colors.white;
-  static const Color textPrimary = Color(0xFF202124);
-  static const Color textSecondary = Color(0xFF5F6368);
-  static const Color divider = Color(0xFFE8EAED);
+  static const Color textPrimary = brand900;
+  static const Color textSecondary = brand800;
+  static const Color divider = brand300;
   
   // Статусы
   static const Color statusFree = Color(0xFF34A853); // Зеленый
@@ -41,8 +48,8 @@ class AppTheme {
         secondary: secondary,
         surface: surface,
         error: statusBusy,
-        onPrimary: Colors.white,
-        onSecondary: Colors.white,
+        onPrimary: brand100,
+        onSecondary: brand900,
         onSurface: textPrimary,
         brightness: Brightness.light,
       ),
@@ -62,7 +69,7 @@ class AppTheme {
       cardTheme: CardThemeData(
         color: cardBackground,
         elevation: 0,
-        shadowColor: Colors.black.withOpacity(0.08),
+        shadowColor: Colors.black.withValues(alpha: 0.08),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
           side: BorderSide.none,

@@ -1,2 +1,7 @@
 uploads/
 
+.env
+.env.*
+*.exe
+*.log
+

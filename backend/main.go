@@ -24,6 +24,9 @@ func main() {
 	// Connect to Database
 	database.Connect()
 
+	// Connect to Redis (optional, enabled via REDIS_URL)
+	database.ConnectRedis()
+
 	// Auto Migrate
 	err := database.DB.AutoMigrate(&models.User{}, &models.Order{})
 	if err != nil {

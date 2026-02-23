@@ -327,15 +327,36 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),
-            child: CircleAvatar(
-              backgroundColor: AppTheme.primary.withOpacity(0.1),
-              child: Text(
-                (auth.user?['name'] ?? '?')[0].toUpperCase(),
-                style: const TextStyle(
-                  color: AppTheme.primary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+            child: Builder(
+              builder: (context) {
+                final name = (auth.user?['name'] ?? '').toString();
+                final avatarUrl =
+                    (auth.user?['avatar_url'] as String?) ?? '';
+                final resolvedAvatarUrl = avatarUrl.isEmpty
+                    ? null
+                    : (avatarUrl.startsWith('http')
+                        ? avatarUrl
+                        : '${ApiService.baseUrl}$avatarUrl');
+                final initials =
+                    name.isNotEmpty ? name[0].toUpperCase() : '?';
+
+                return CircleAvatar(
+                  radius: 18,
+                  backgroundColor: AppTheme.primary.withOpacity(0.1),
+                  backgroundImage: resolvedAvatarUrl != null
+                      ? NetworkImage(resolvedAvatarUrl)
+                      : null,
+                  child: resolvedAvatarUrl == null
+                      ? Text(
+                          initials,
+                          style: const TextStyle(
+                            color: AppTheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        )
+                      : null,
+                );
+              },
             ),
           ),
         ],
@@ -407,9 +428,7 @@ class _HomeTab extends StatelessWidget {
           children: [
             if (currentOrder != null)
               ...[
-                TripCard(order: currentOrder),
-                const SizedBox(height: 24),
-                PriceSection(price: currentOrder['price']),
+                TripCard(order: currentOrder, callClient: callClient),
                 const SizedBox(height: 24),
                 ActionButtons(
                   order: currentOrder,
@@ -431,14 +450,18 @@ class _HomeTab extends StatelessWidget {
 /// Карточка маршрута и данных клиента
 class TripCard extends StatelessWidget {
   final dynamic order;
+  final Future<void> Function(String) callClient;
 
-  const TripCard({super.key, required this.order});
+  const TripCard({super.key, required this.order, required this.callClient});
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final theme = Theme.of(context);
     final phone = (order['client_phone'] ?? '').toString();
+    final from = (order['from_address'] ?? '').toString();
+    final to = (order['to_address'] ?? '').toString();
+    final price = order['price'];
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -470,20 +493,60 @@ class TripCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                _AddressRow(
-                  iconBackgroundColor: AppTheme.statusFree.withOpacity(0.15),
-                  iconColor: AppTheme.statusFree,
-                  icon: Icons.radio_button_checked,
-                  label: l10n.from,
-                  address: (order['from_address'] ?? '').toString(),
-                ),
-                const SizedBox(height: 20),
-                _AddressRow(
-                  iconBackgroundColor: AppTheme.statusBusy.withOpacity(0.15),
-                  iconColor: AppTheme.statusBusy,
-                  icon: Icons.flag,
-                  label: l10n.to,
-                  address: (order['to_address'] ?? '').toString(),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            from,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: AppTheme.textPrimary,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(
+                                Icons.chevron_right,
+                                size: 18,
+                                color: AppTheme.textSecondary,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  to,
+                                  style:
+                                      theme.textTheme.bodyMedium?.copyWith(
+                                    color: AppTheme.textSecondary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      '${_formatMoneyKzt(price)} ${l10n.currencyKzt}',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: AppTheme.primary,
+                      ),
+                      textAlign: TextAlign.right,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 20),
                 Row(
@@ -531,6 +594,26 @@ class TripCard extends StatelessWidget {
                         ],
                       ),
                     ),
+                    if (phone.isNotEmpty) ...[
+                      const SizedBox(width: 12),
+                      InkWell(
+                        onTap: () => callClient(phone),
+                        borderRadius: BorderRadius.circular(999),
+                        child: Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary.withOpacity(0.08),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.phone_in_talk,
+                            color: AppTheme.primary,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 if ((order['comment'] ?? '').toString().isNotEmpty) ...[
@@ -624,41 +707,6 @@ class _AddressRow extends StatelessWidget {
   }
 }
 
-/// Блок с ценой
-class PriceSection extends StatelessWidget {
-  final dynamic price;
-
-  const PriceSection({super.key, required this.price});
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Text(
-          l10n.price,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                fontSize: 13,
-                color: AppTheme.textSecondary,
-                fontWeight: FontWeight.w500,
-              ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          '${_formatMoneyKzt(price)} ${l10n.currencyKzt}',
-          style: const TextStyle(
-            fontSize: 32,
-            fontWeight: FontWeight.bold,
-            color: AppTheme.statusFree,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 /// Кнопки и пошаговый интерфейс под активным заказом (finite state machine)
 class ActionButtons extends StatefulWidget {
   final dynamic order;
@@ -684,6 +732,7 @@ class _ActionButtonsState extends State<ActionButtons> {
   OrderStatus _orderStatus = OrderStatus.assigned;
   Timer? _waitTimer;
   int _waitSeconds = 0;
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -750,25 +799,15 @@ class _ActionButtonsState extends State<ActionButtons> {
   }
 
   Color _statusColor() {
-    switch (_orderStatus) {
-      case OrderStatus.assigned:
-        return Colors.grey;
-      case OrderStatus.onTheWayToPickup:
-        return Colors.blue;
-      case OrderStatus.arrivedAtPickup:
-        return Colors.orange;
-      case OrderStatus.tripStarted:
-        return Colors.purple;
-      case OrderStatus.completed:
-        return Colors.green;
-    }
+    // Единый бренд-цвет для всех состояний шага и основной кнопки,
+    // чтобы "Принять", "На месте", "Начать поездку" и "Завершить заказ"
+    // выглядели одинаково.
+    return AppTheme.primary;
   }
 
   String _statusLabel() {
     switch (_orderStatus) {
       case OrderStatus.assigned:
-      case OrderStatus.onTheWayToPickup:
-        return 'Еду к клиенту';
       case OrderStatus.onTheWayToPickup:
         return 'Еду к клиенту';
       case OrderStatus.arrivedAtPickup:
@@ -791,8 +830,6 @@ class _ActionButtonsState extends State<ActionButtons> {
       case OrderStatus.assigned:
       case OrderStatus.onTheWayToPickup:
         return 0; // Еду
-      case OrderStatus.onTheWayToPickup:
-        return 0;
       case OrderStatus.arrivedAtPickup:
         return 1; // Приехал
       case OrderStatus.tripStarted:
@@ -877,6 +914,12 @@ class _ActionButtonsState extends State<ActionButtons> {
     final from = (widget.order['from_address'] ?? '').toString();
     final to = (widget.order['to_address'] ?? '').toString();
 
+    if (_isSubmitting) return;
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
     try {
       switch (_orderStatus) {
         case OrderStatus.assigned:
@@ -919,6 +962,12 @@ class _ActionButtonsState extends State<ActionButtons> {
           backgroundColor: AppTheme.statusBusy,
         ),
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
     }
   }
 
@@ -1159,46 +1208,52 @@ class _ActionButtonsState extends State<ActionButtons> {
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: () => _onPrimaryPressed(context),
+            onPressed:
+                _isSubmitting ? null : () => _onPrimaryPressed(context),
             style: ElevatedButton.styleFrom(
-              backgroundColor: _statusColor(),
-              foregroundColor: Colors.white,
+              backgroundColor: _isSubmitting
+                  ? Colors.transparent
+                  : _statusColor(),
+              foregroundColor:
+                  _isSubmitting ? AppTheme.primary : Colors.white,
               minimumSize: const Size.fromHeight(56),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(28),
+                side: _isSubmitting
+                    ? const BorderSide(
+                        color: AppTheme.primary,
+                        width: 2,
+                      )
+                    : BorderSide.none,
               ),
             ),
-            child: Text(
-              primaryLabel,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              transitionBuilder: (child, animation) => FadeTransition(
+                opacity: animation,
+                child: child,
               ),
+              child: _isSubmitting
+                  ? const SizedBox(
+                      key: ValueKey('order-primary-loading'),
+                      height: 24,
+                      width: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2.5),
+                    )
+                  : Text(
+                      primaryLabel,
+                      key: const ValueKey('order-primary-label'),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
             ),
           ),
         ),
         const SizedBox(height: 16),
         Row(
           children: [
-            if (canCall) ...[
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => widget.callClient(phone),
-                  icon: const Icon(Icons.phone_in_talk, size: 18),
-                  label: Text(
-                    l10n.callClient,
-                    style: const TextStyle(fontSize: 14),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(52),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-            ],
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: onOpenMapPressed,

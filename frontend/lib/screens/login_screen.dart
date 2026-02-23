@@ -212,30 +212,49 @@ class _LoginScreenState extends State<LoginScreen> {
                               child: ElevatedButton(
                                 onPressed: _isLoading ? null : _login,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppTheme.primary,
-                                  foregroundColor: Colors.white,
+                                  backgroundColor: _isLoading
+                                      ? Colors.transparent
+                                      : AppTheme.primary,
+                                  foregroundColor: _isLoading
+                                      ? AppTheme.primary
+                                      : Colors.white,
                                   elevation: 0,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
+                                    borderRadius: BorderRadius.circular(26),
+                                    side: _isLoading
+                                        ? const BorderSide(
+                                            color: AppTheme.primary,
+                                            width: 2,
+                                          )
+                                        : BorderSide.none,
                                   ),
                                 ),
-                                child: _isLoading
-                                    ? const SizedBox(
-                                        height: 24,
-                                        width: 24,
-                                        child: CircularProgressIndicator(
-                                          color: Colors.white,
-                                          strokeWidth: 2.5,
+                                child: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 220),
+                                  transitionBuilder: (child, animation) =>
+                                      FadeTransition(
+                                    opacity: animation,
+                                    child: child,
+                                  ),
+                                  child: _isLoading
+                                      ? const SizedBox(
+                                          key: ValueKey('login-loading'),
+                                          height: 24,
+                                          width: 24,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.5,
+                                          ),
+                                        )
+                                      : Text(
+                                          l10n.login,
+                                          key: const ValueKey('login-label'),
+                                          style: const TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w600,
+                                            letterSpacing: 0.5,
+                                          ),
                                         ),
-                                      )
-                                    : Text(
-                                        l10n.login,
-                                        style: const TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w600,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
+                                ),
                               ),
                             ),
                           ],
