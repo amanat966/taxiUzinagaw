@@ -8,6 +8,7 @@ class OrderProvider with ChangeNotifier {
   List<dynamic> _drivers = [];
   List<dynamic> _orders = [];
   final Set<int> _arrivedAtPickupOrderIds = {};
+  final Set<int> _onTheWayToPickupOrderIds = {};
   Timer? _pollingTimer;
 
   List<dynamic> get drivers => _drivers;
@@ -26,6 +27,23 @@ class OrderProvider with ChangeNotifier {
       _arrivedAtPickupOrderIds.add(id);
     } else {
       _arrivedAtPickupOrderIds.remove(id);
+    }
+    notifyListeners();
+  }
+
+  bool isOnTheWayToPickup(dynamic orderId) {
+    final id = _normalizeOrderId(orderId);
+    if (id == null) return false;
+    return _onTheWayToPickupOrderIds.contains(id);
+  }
+
+  void markOnTheWayToPickup(dynamic orderId, {bool onTheWay = true}) {
+    final id = _normalizeOrderId(orderId);
+    if (id == null) return;
+    if (onTheWay) {
+      _onTheWayToPickupOrderIds.add(id);
+    } else {
+      _onTheWayToPickupOrderIds.remove(id);
     }
     notifyListeners();
   }
@@ -76,6 +94,16 @@ class OrderProvider with ChangeNotifier {
       // For MVP, we'll just try to fetch orders. Drivers might fail fetching drivers list.
 
       _orders = await _apiService.getOrders();
+
+      // Очистим локальные флаги для заказов, которых больше нет в списке
+      final existingIds = _orders
+          .map((o) => _normalizeOrderId(o['id']))
+          .whereType<int>()
+          .toSet();
+      _arrivedAtPickupOrderIds
+          .removeWhere((id) => !existingIds.contains(id));
+      _onTheWayToPickupOrderIds
+          .removeWhere((id) => !existingIds.contains(id));
       notifyListeners();
 
       // Try fetching drivers (only works for dispatcher)
@@ -121,6 +149,7 @@ class OrderProvider with ChangeNotifier {
     await _apiService.updateOrderStatus(orderId, status);
     if (status == 'done' || status == 'cancelled') {
       _arrivedAtPickupOrderIds.remove(orderId);
+      _onTheWayToPickupOrderIds.remove(orderId);
     }
     await _fetchData();
   }

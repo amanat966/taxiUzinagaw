@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import 'dart:convert';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -18,6 +19,14 @@ String _formatMoneyKzt(dynamic v) {
   final fmt = NumberFormat.decimalPattern();
   final value = (n % 1 == 0) ? fmt.format(n.toInt()) : NumberFormat('#,##0.##').format(n);
   return value;
+}
+
+enum OrderStatus {
+  assigned, // заказ назначен
+  onTheWayToPickup, // водитель едет к точке А
+  arrivedAtPickup, // водитель на месте, ожидание клиента
+  tripStarted, // клиент в машине, едем к точке Б
+  completed, // заказ завершен
 }
 
 class DriverHomeScreen extends StatefulWidget {
@@ -248,6 +257,23 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
       _maybeShowAssignedOrderDialog(context, l10n, assignedOrder);
     }
 
+    final driverStatus = (auth.user?['driver_status'] ?? 'offline') as String;
+    Color statusColor;
+    String statusText;
+    switch (driverStatus) {
+      case 'free':
+        statusColor = AppTheme.statusFree;
+        statusText = l10n.free;
+        break;
+      case 'busy':
+        statusColor = AppTheme.statusBusy;
+        statusText = l10n.busy;
+        break;
+      default:
+        statusColor = AppTheme.statusOffline;
+        statusText = l10n.offline;
+    }
+
     final pages = [
       _HomeTab(
         auth: auth,
@@ -266,15 +292,36 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
     return Scaffold(
       backgroundColor: AppTheme.background,
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
-            Text(
-              '${l10n.driver}: ${auth.user?['name'] ?? '...'}',
-              style: const TextStyle(fontSize: 18),
+            Expanded(
+              child: Text(
+                (auth.user?['name'] ?? '...').toString(),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-            const SizedBox(height: 2),
-            _StatusBadge(status: auth.user?['driver_status'] ?? 'offline'),
+            const SizedBox(width: 8),
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: statusColor,
+                shape: BoxShape.circle,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              statusText,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: statusColor,
+              ),
+            ),
           ],
         ),
         actions: [
@@ -333,68 +380,6 @@ class _DriverHomeScreenState extends State<DriverHomeScreen> {
   }
 }
 
-class _StatusBadge extends StatelessWidget {
-  final String status;
-
-  const _StatusBadge({required this.status});
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    Color color;
-    String text;
-    switch (status) {
-      case 'free':
-        color = AppTheme.statusFree;
-        text = l10n.free;
-        break;
-      case 'busy':
-        color = AppTheme.statusBusy;
-        text = l10n.busy;
-        break;
-      default:
-        color = AppTheme.statusOffline;
-        text = l10n.offline;
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 6,
-            height: 6,
-            decoration: BoxDecoration(
-              color: color,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: color.withOpacity(0.5),
-                  blurRadius: 4,
-                  spreadRadius: 1,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            text,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: color,
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _HomeTab extends StatelessWidget {
   final AuthProvider auth;
   final OrderProvider orderProvider;
@@ -420,11 +405,6 @@ class _HomeTab extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            DriverStatusSection(
-              auth: auth,
-              orderProvider: orderProvider,
-            ),
-            const SizedBox(height: 24),
             if (currentOrder != null)
               ...[
                 TripCard(order: currentOrder),
@@ -432,163 +412,16 @@ class _HomeTab extends StatelessWidget {
                 PriceSection(price: currentOrder['price']),
                 const SizedBox(height: 24),
                 ActionButtons(
-                  status: (currentOrder['status'] ?? '').toString(),
-                  phone: (currentOrder['client_phone'] ?? '').toString(),
-                  onPrimaryPressed: () async {
-                    try {
-                      if (currentOrder['status'] == 'accepted') {
-                        // If driver starts trip, assume pickup is reached.
-                        orderProvider.markArrivedAtPickup(currentOrder['id'], arrived: true);
-                        await orderProvider.updateOrderStatus(
-                          currentOrder['id'],
-                          'in_progress',
-                        );
-                        await auth.setDriverStatus('busy');
-                      } else if (currentOrder['status'] == 'in_progress') {
-                        await orderProvider.updateOrderStatus(
-                          currentOrder['id'],
-                          'done',
-                        );
-                        await auth.setDriverStatus('free');
-                      }
-                    } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('$e')),
-                        );
-                      }
-                    }
-                  },
-                  showArrivedButton: (currentOrder['status'] == 'accepted') &&
-                      !orderProvider.isArrivedAtPickup(currentOrder['id']),
-                  onArrivedPressed: () =>
-                      orderProvider.markArrivedAtPickup(currentOrder['id'], arrived: true),
-                  onCallPressed: (currentOrder['client_phone'] ?? '')
-                          .toString()
-                          .isNotEmpty
-                      ? () => callClient(
-                            (currentOrder['client_phone'] ?? '').toString(),
-                          )
-                      : null,
-                  onOpenMapPressed: () {
-                    final from = (currentOrder['from_address'] ?? '').toString();
-                    final to = (currentOrder['to_address'] ?? '').toString();
-                    final status = (currentOrder['status'] ?? '').toString();
-                    final arrived = orderProvider.isArrivedAtPickup(currentOrder['id']);
-                    final effectiveArrived = arrived || status == 'in_progress';
-
-                    // Before "На месте": current location -> A (pickup)
-                    // After "На месте": A -> B
-                    if (!effectiveArrived) {
-                      openMap('', from);
-                    } else {
-                      openMap(from, to);
-                    }
-                  },
+                  order: currentOrder,
+                  orderProvider: orderProvider,
+                  auth: auth,
+                  openMap: openMap,
+                  callClient: callClient,
                 ),
               ]
             else
               ..._NewOrdersSection.build(context, orderProvider, openMap),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Статус водителя (карточка вверху экрана)
-class DriverStatusSection extends StatelessWidget {
-  final AuthProvider auth;
-  final OrderProvider orderProvider;
-
-  const DriverStatusSection({
-    super.key,
-    required this.auth,
-    required this.orderProvider,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = AppLocalizations.of(context)!;
-    final theme = Theme.of(context);
-
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Colors.white,
-              AppTheme.background,
-            ],
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      l10n.status,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: AppTheme.textSecondary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      auth.user?['driver_status'] == 'offline'
-                          ? l10n.offline
-                          : l10n.free,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.textPrimary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Transform.scale(
-                scale: 1.1,
-                child: Switch(
-                  value: auth.user?['driver_status'] != 'offline',
-                  activeColor: AppTheme.statusFree,
-                  activeTrackColor: AppTheme.statusFree.withOpacity(0.5),
-                  inactiveThumbColor: AppTheme.statusOffline,
-                  inactiveTrackColor: AppTheme.statusOffline.withOpacity(0.3),
-                  onChanged: (val) async {
-                    final newStatus = val ? 'free' : 'offline';
-                    try {
-                      await orderProvider.updateDriverStatus(newStatus);
-                      await auth.setDriverStatus(newStatus);
-                    } catch (e) {
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('$e'),
-                            backgroundColor: AppTheme.statusBusy,
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        );
-                      }
-                    }
-                  },
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );
@@ -826,69 +659,520 @@ class PriceSection extends StatelessWidget {
   }
 }
 
-/// Кнопки действий под заказом
-class ActionButtons extends StatelessWidget {
-  final String status;
-  final String phone;
-  final VoidCallback onPrimaryPressed;
-  final VoidCallback? onArrivedPressed;
-  final bool showArrivedButton;
-  final VoidCallback? onCallPressed;
-  final VoidCallback onOpenMapPressed;
+/// Кнопки и пошаговый интерфейс под активным заказом (finite state machine)
+class ActionButtons extends StatefulWidget {
+  final dynamic order;
+  final OrderProvider orderProvider;
+  final AuthProvider auth;
+  final void Function(String from, String to) openMap;
+  final Future<void> Function(String) callClient;
 
   const ActionButtons({
     super.key,
-    required this.status,
-    required this.phone,
-    required this.onPrimaryPressed,
-    required this.onArrivedPressed,
-    required this.showArrivedButton,
-    required this.onCallPressed,
-    required this.onOpenMapPressed,
+    required this.order,
+    required this.orderProvider,
+    required this.auth,
+    required this.openMap,
+    required this.callClient,
   });
+
+  @override
+  State<ActionButtons> createState() => _ActionButtonsState();
+}
+
+class _ActionButtonsState extends State<ActionButtons> {
+  OrderStatus _orderStatus = OrderStatus.assigned;
+  Timer? _waitTimer;
+  int _waitSeconds = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _orderStatus = _resolveOrderStatus();
+    _syncTimerWithStatus();
+  }
+
+  @override
+  void didUpdateWidget(covariant ActionButtons oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final newStatus = _resolveOrderStatus();
+    if (newStatus != _orderStatus) {
+      _orderStatus = newStatus;
+      _syncTimerWithStatus();
+    }
+  }
+
+  @override
+  void dispose() {
+    _waitTimer?.cancel();
+    super.dispose();
+  }
+
+  OrderStatus _resolveOrderStatus() {
+    final backendStatus = (widget.order['status'] ?? '').toString();
+    final arrived =
+        widget.orderProvider.isArrivedAtPickup(widget.order['id']);
+
+    if (backendStatus == 'in_progress') {
+      return OrderStatus.tripStarted;
+    }
+
+    if (backendStatus == 'accepted') {
+      if (arrived) return OrderStatus.arrivedAtPickup;
+      // После принятия заказа считаем, что водитель уже едет к клиенту.
+      return OrderStatus.onTheWayToPickup;
+    }
+
+    if (backendStatus == 'done') {
+      return OrderStatus.completed;
+    }
+
+    return OrderStatus.assigned;
+  }
+
+  void _syncTimerWithStatus() {
+    if (_orderStatus == OrderStatus.arrivedAtPickup) {
+      if (_waitTimer == null) {
+        _waitSeconds = 0;
+        _waitTimer =
+            Timer.periodic(const Duration(seconds: 1), (_) {
+          if (!mounted) return;
+          setState(() {
+            _waitSeconds++;
+          });
+        });
+      }
+    } else {
+      _waitTimer?.cancel();
+      _waitTimer = null;
+      _waitSeconds = 0;
+    }
+  }
+
+  Color _statusColor() {
+    switch (_orderStatus) {
+      case OrderStatus.assigned:
+        return Colors.grey;
+      case OrderStatus.onTheWayToPickup:
+        return Colors.blue;
+      case OrderStatus.arrivedAtPickup:
+        return Colors.orange;
+      case OrderStatus.tripStarted:
+        return Colors.purple;
+      case OrderStatus.completed:
+        return Colors.green;
+    }
+  }
+
+  String _statusLabel() {
+    switch (_orderStatus) {
+      case OrderStatus.assigned:
+      case OrderStatus.onTheWayToPickup:
+        return 'Еду к клиенту';
+      case OrderStatus.onTheWayToPickup:
+        return 'Еду к клиенту';
+      case OrderStatus.arrivedAtPickup:
+        return 'На месте';
+      case OrderStatus.tripStarted:
+        return 'В пути с клиентом';
+      case OrderStatus.completed:
+        return 'Заказ завершен';
+    }
+  }
+
+  String _formatWaitTime() {
+    final minutes = _waitSeconds ~/ 60;
+    final seconds = _waitSeconds % 60;
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  int _stepIndex() {
+    switch (_orderStatus) {
+      case OrderStatus.assigned:
+      case OrderStatus.onTheWayToPickup:
+        return 0; // Еду
+      case OrderStatus.onTheWayToPickup:
+        return 0;
+      case OrderStatus.arrivedAtPickup:
+        return 1; // Приехал
+      case OrderStatus.tripStarted:
+      case OrderStatus.completed:
+        return _orderStatus == OrderStatus.tripStarted ? 2 : 3;
+    }
+  }
+
+  Widget _buildStepper() {
+    final steps = [
+      'Еду',
+      'Приехал',
+      'Поехали',
+      'Завершил',
+    ];
+    final activeIndex = _stepIndex();
+
+    return Row(
+      children: List.generate(steps.length, (index) {
+        final isActive = index <= activeIndex;
+        final color = isActive ? _statusColor() : Colors.grey.shade400;
+        return Expanded(
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  if (index > 0)
+                    Expanded(
+                      child: Container(
+                        height: 2,
+                        color: isActive
+                            ? color
+                            : Colors.grey.shade300,
+                      ),
+                    ),
+                  Container(
+                    width: 18,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: isActive
+                          ? color
+                          : Colors.grey.shade200,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  if (index < steps.length - 1)
+                    Expanded(
+                      child: Container(
+                        height: 2,
+                        color: activeIndex > index
+                            ? color
+                            : Colors.grey.shade300,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                steps[index],
+                style: TextStyle(
+                  fontSize: 10,
+                  color: isActive
+                      ? _statusColor()
+                      : Colors.grey.shade500,
+                  fontWeight:
+                      isActive ? FontWeight.w600 : FontWeight.w400,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+
+  Future<void> _onPrimaryPressed(BuildContext context) async {
+    final l10n = AppLocalizations.of(context)!;
+    final id = widget.order['id'];
+    final from = (widget.order['from_address'] ?? '').toString();
+    final to = (widget.order['to_address'] ?? '').toString();
+
+    try {
+      switch (_orderStatus) {
+        case OrderStatus.assigned:
+        case OrderStatus.onTheWayToPickup:
+          widget.orderProvider
+              .markArrivedAtPickup(id, arrived: true);
+          setState(() {
+            _orderStatus = _resolveOrderStatus();
+            _syncTimerWithStatus();
+          });
+          break;
+        case OrderStatus.arrivedAtPickup:
+          await widget.orderProvider
+              .updateOrderStatus(id, 'in_progress');
+          await widget.auth.setDriverStatus('busy');
+          setState(() {
+            _orderStatus = _resolveOrderStatus();
+            _syncTimerWithStatus();
+          });
+          break;
+        case OrderStatus.tripStarted:
+          final completedOrder = widget.order;
+          await widget.orderProvider
+              .updateOrderStatus(id, 'done');
+          await widget.auth.setDriverStatus('free');
+          if (!mounted) return;
+          _showCompletedSheet(context, completedOrder, from, to);
+          break;
+        case OrderStatus.completed:
+          if (Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
+          break;
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('$e'),
+          backgroundColor: AppTheme.statusBusy,
+        ),
+      );
+    }
+  }
+
+  void _showCompletedSheet(
+    BuildContext context,
+    dynamic order,
+    String from,
+    String to,
+  ) {
+    final l10n = AppLocalizations.of(context)!;
+    final price = order['price'];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return SafeArea(
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(24),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Заказ завершен',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: Colors.green,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          const Text(
+                            'Завершен',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.green,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  '$from → $to',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  l10n.price,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${_formatMoneyKzt(price)} ${l10n.currencyKzt}',
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: const Text(
+                      'Вернуться к списку',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final phone = (widget.order['client_phone'] ?? '').toString();
+    final from = (widget.order['from_address'] ?? '').toString();
+    final to = (widget.order['to_address'] ?? '').toString();
 
-    final bool canCall = phone.isNotEmpty && onCallPressed != null;
-    final bool isAccepted = status == 'accepted';
-    final bool isInProgress = status == 'in_progress';
+    final bool canCall = phone.isNotEmpty;
+
+    VoidCallback onOpenMapPressed;
+    if (_orderStatus == OrderStatus.assigned ||
+        _orderStatus == OrderStatus.onTheWayToPickup) {
+      onOpenMapPressed = () => widget.openMap('', from);
+    } else {
+      onOpenMapPressed = () => widget.openMap(from, to);
+    }
+
+    String primaryLabel;
+    switch (_orderStatus) {
+      case OrderStatus.assigned:
+      case OrderStatus.onTheWayToPickup:
+        primaryLabel = 'На месте';
+        break;
+      case OrderStatus.arrivedAtPickup:
+        primaryLabel = 'Начать поездку';
+        break;
+      case OrderStatus.tripStarted:
+        primaryLabel = 'Завершить заказ';
+        break;
+      case OrderStatus.completed:
+        primaryLabel = 'Вернуться к списку';
+        break;
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (showArrivedButton) ...[
-          OutlinedButton.icon(
-            onPressed: onArrivedPressed,
-            icon: const Icon(Icons.place_outlined, size: 20),
-            label: Text(l10n.arrived),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(52),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: _statusColor().withOpacity(0.08),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: _statusColor(),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    _statusLabel(),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: _statusColor(),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _buildStepper(),
+            ],
+          ),
+        ),
+        if (_orderStatus == OrderStatus.arrivedAtPickup) ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.06),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Ожидание клиента',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                Text(
+                  _formatWaitTime(),
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.orange,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: () => _onPrimaryPressed(context),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _statusColor(),
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(56),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-        ],
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton.icon(
-            onPressed: onPrimaryPressed,
-            icon: Icon(
-              isAccepted ? Icons.play_arrow : Icons.check,
-              size: 22,
-            ),
-            label: Text(
-              isAccepted ? l10n.startTrip : l10n.finishTrip,
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: isInProgress ? Colors.red : null,
-              foregroundColor: isInProgress ? Colors.white : null,
-              minimumSize: const Size.fromHeight(56),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
+            child: Text(
+              primaryLabel,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
               ),
             ),
           ),
@@ -899,7 +1183,7 @@ class ActionButtons extends StatelessWidget {
             if (canCall) ...[
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: onCallPressed,
+                  onPressed: () => widget.callClient(phone),
                   icon: const Icon(Icons.phone_in_talk, size: 18),
                   label: Text(
                     l10n.callClient,
@@ -1726,6 +2010,40 @@ class _ProfileTab extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.circle_outlined),
+                    title: Text(l10n.status),
+                    trailing: Switch(
+                      value: auth.user?['driver_status'] != 'offline',
+                      activeColor: AppTheme.statusFree,
+                      activeTrackColor: AppTheme.statusFree.withOpacity(0.5),
+                      inactiveThumbColor: AppTheme.statusOffline,
+                      inactiveTrackColor: AppTheme.statusOffline.withOpacity(0.3),
+                      onChanged: (val) async {
+                        final newStatus = val ? 'free' : 'offline';
+                        try {
+                          await Provider.of<OrderProvider>(context, listen: false)
+                              .updateDriverStatus(newStatus);
+                          await auth.setDriverStatus(newStatus);
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('$e'),
+                                backgroundColor: AppTheme.statusBusy,
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   Consumer<LocaleProvider>(
                     builder: (context, localeProvider, _) {
                       final code = localeProvider.locale.languageCode;
